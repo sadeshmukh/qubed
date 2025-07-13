@@ -17,17 +17,6 @@ window.onresize = () => {
 
 const ctx = canvas.getContext("2d");
 
-// keep so we know it works
-ctx.fillStyle = "red";
-ctx.fillRect(0, 0, 20, 20);
-
-// internal representation of the game
-
-let currentTime = Date.now();
-let lastTime = currentTime;
-
-const initialTime = currentTime;
-
 function drawLine(x1, y1, x2, y2, color = "white", width = 1) {
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
@@ -76,106 +65,159 @@ function drawPolygon(points, color = "white", width = 2, fill = true) {
   }
 }
 
-function update() {
-  currentTime = Date.now();
-  const deltaTime = currentTime - lastTime;
-  lastTime = currentTime;
+// let's do some physics simulation
 
-  // draw bounds to vanishing point at center from bottom left, bottom right
-  const center = {
-    x: squareSize / 2,
-    y: squareSize / 4,
-  };
-
-  // draw two lines that border to horizon
-
-  // drawLine(0, center.y, squareSize, center.y, "white", 5);
-
-  const divergence = 50;
-
-  // drawLine(0, squareSize, center.x - divergence, center.y);
-
-  // drawLine(squareSize, squareSize, center.x + divergence, center.y);
-
-  drawCircle(center.x, center.y, 10);
-
-  const advancement = (currentTime - initialTime) / 1000;
-  console.log(advancement);
-
-  // periodic lines left/right along this triangle
-  // my guess is that proportional distance from center is equal distances
-
-  for (let i = 1; i < 40; i++) {
-    const xBounds = {
-      left: 0,
-      right: squareSize, // for testing
-    };
-
-    // const yDiff = (squareSize - center.y) / i;
-    // const yCoord = center.y + yDiff;
-
-    // drawLine(xBounds.left, yCoord, xBounds.right, yCoord);
-
-    const t = i / 40; // normalizes it to frac
-    const perspectiveT = 1 - Math.pow(1 - t, 1 / 2); // exponential curve
-    const yCoord = center.y + (squareSize - center.y) * perspectiveT;
-
-    drawLine(xBounds.left, yCoord, xBounds.right, yCoord);
+class Vector {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
   }
 
-  // angle enclosed: ~150 deg, calculated by looking at either extreme
-  // atan((center.x + perspectiveSpacing * (squareSize / 4)) / (squareSize - center.y))
-
-  // verticalish lines with proper perspective spacing
-  const viewerDistance = 10;
-  const lineDepth = 10;
-
-  const numVerticalLines = 60;
-  for (let i = 1; i < numVerticalLines; i++) {
-    const gridPosition = (i - numVerticalLines / 2) * 0.386; // calibrated to 150 deg
-
-    const perspectiveSpacing = (gridPosition * viewerDistance) / lineDepth;
-    const startXPos = center.x + perspectiveSpacing * (squareSize / 4);
-
-    drawLine(startXPos, squareSize, center.x, center.y);
+  add(other) {
+    return new Vector(this.x + other.x, this.y + other.y);
   }
 
-  // FOV angle calculation, courtesy GPT
-  const edgeGridPosLeft = (1 - numVerticalLines / 2) * 0.386;
+  subtract(other) {
+    return new Vector(this.x - other.x, this.y - other.y);
+  }
 
-  const edgeSpacingLeft = (edgeGridPosLeft * viewerDistance) / lineDepth;
+  multiply(scalar) {
+    return new Vector(this.x * scalar, this.y * scalar);
+  }
 
-  const edgeXLeft = center.x + edgeSpacingLeft * (squareSize / 4);
-
-  const verticalDistance = squareSize - center.y;
-  const edgeAngle = Math.atan(
-    Math.abs(edgeXLeft - center.x) / verticalDistance
-  );
-
-  const totalAngleRadians = edgeAngle * 2;
-  const totalAngleDegrees = totalAngleRadians * (180 / Math.PI);
-
-  // console.log(`angle: ${totalAngleDegrees.toFixed(1)}`); // 150 deg
-
-  // draw triangle
-  const trianglePointsLeft = [
-    { x: center.x, y: center.y },
-    { x: edgeXLeft, y: center.y },
-    { x: edgeXLeft, y: center.y + verticalDistance },
-  ];
-  drawPolygon(trianglePointsLeft, "black", 2, true);
-
-  const edgeXRight = center.x - edgeSpacingLeft * (squareSize / 4);
-  const trianglePointsRight = [
-    { x: center.x, y: center.y },
-    { x: edgeXRight, y: center.y },
-    { x: edgeXRight, y: center.y + verticalDistance },
-  ];
-  drawPolygon(trianglePointsRight, "black", 2, true);
-
-  requestAnimationFrame(update);
+  divide(scalar) {
+    return new Vector(this.x / scalar, this.y / scalar);
+  }
 }
 
-// since the last lines only enclose approx 150 deg, instead of stopping the horizontal lines drawn, just draw over a triangle to cover it
+Vector.prototype.add = function (other) {
+  return new Vector(this.x + other.x, this.y + other.y);
+};
+
+Vector.prototype.subtract = function (other) {
+  return new Vector(this.x - other.x, this.y - other.y);
+};
+
+Vector.prototype.multiply = function (scalar) {
+  return new Vector(this.x * scalar, this.y * scalar);
+};
+
+Vector.prototype.divide = function (scalar) {
+  return new Vector(this.x / scalar, this.y / scalar);
+};
+
+class CollisionBox {
+  constructor(x, y, width, height) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+  }
+}
+
+class Object {
+  constructor(x, y, width, height) {
+    this.x = x;
+    this.y = y;
+    this.collisionBox = new CollisionBox(x, y, width, height);
+    this.velocity = new Vector(0, 0);
+    // this.acceleration = {
+    //   x: 0,
+    //   y: 0,
+    // };
+    this.mass = 1;
+    this.width = width;
+    this.height = height;
+  }
+
+  draw(ctx) {
+    ctx.fillStyle = "red";
+    // default to 4 points at corners
+    const points = [
+      { x: this.x, y: this.y },
+      { x: this.x + this.width, y: this.y },
+      { x: this.x + this.width, y: this.y + this.height },
+      { x: this.x, y: this.y + this.height },
+    ];
+    drawPolygon(points, "red", 2, true);
+  }
+
+  update() {
+    this.x += this.velocity.x;
+    this.y += this.velocity.y;
+    this.collisionBox.x = this.x;
+    this.collisionBox.y = this.y;
+  }
+
+  checkCollision(other) {
+    // simplistic square collision detection
+    return (
+      this.collisionBox.x < other.collisionBox.x + other.collisionBox.width &&
+      this.collisionBox.x + this.collisionBox.width > other.collisionBox.x &&
+      this.collisionBox.y < other.collisionBox.y + other.collisionBox.height &&
+      this.collisionBox.y + this.collisionBox.height > other.collisionBox.y
+    );
+  }
+
+  applyForce(force) {
+    this.velocity = this.velocity.add(force.multiply(this.mass));
+  }
+}
+
+class Box extends Object {
+  constructor(x, y, width, height) {
+    super(x, y, width, height);
+  }
+
+  draw(ctx) {
+    ctx.fillStyle = "blue";
+    ctx.fillRect(this.x, this.y, this.width, this.height);
+  }
+}
+
+class PhysicsEngine {
+  constructor() {
+    this.objects = [];
+  }
+
+  addObject(object) {
+    this.objects.push(object);
+  }
+
+  update() {
+    this.objects.forEach((object) => {
+      object.update();
+    });
+  }
+}
+
+class World {
+  constructor() {
+    this.objects = [];
+    this.physicsEngine = new PhysicsEngine();
+  }
+
+  addObject(object) {
+    this.objects.push(object);
+    this.physicsEngine.addObject(object);
+  }
+
+  update() {
+    ctx.clearRect(0, 0, squareSize, squareSize);
+    this.physicsEngine.update();
+    this.objects.forEach((object) => {
+      object.draw(ctx);
+    });
+  }
+}
+
+const world = new World();
+
+const box = new Box(100, 100, 100, 100);
+
+function update() {
+  world.update();
+  requestAnimationFrame(update);
+}
 
 requestAnimationFrame(update);
