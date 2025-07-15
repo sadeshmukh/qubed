@@ -1,3 +1,5 @@
+import { Vector } from "../core/Vector";
+
 export interface Point {
   x: number;
   y: number;
@@ -80,4 +82,32 @@ export function drawPolygon(
     ctx.fillStyle = color;
     ctx.fill();
   }
+}
+
+export function drawVector(
+  ctx: CanvasRenderingContext2D,
+  vector: Vector,
+  color: string = "white",
+  width: number = 2,
+  mode: "width" | "length" = "width" // draw as normalized vector growing logarithmically in width versus actual vector length
+): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  if (mode === "width") {
+    const normalized = vector.normalize();
+    const logMagnitude = Math.log(normalized.magnitude());
+    drawLine(
+      ctx,
+      0,
+      0,
+      normalized.x * 1,
+      normalized.y * 1,
+      color,
+      logMagnitude / 10
+    );
+  } else {
+    drawLine(ctx, 0, 0, vector.x, vector.y, color, width);
+  }
+  ctx.stroke();
 }

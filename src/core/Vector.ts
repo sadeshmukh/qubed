@@ -25,4 +25,8 @@ export class Vector {
     const mag = this.magnitude();
     return mag > 0 ? this.divide(mag) : new Vector(0, 0);
   }
+
+  dot(other: Vector): number {
+    return this.x * other.x + this.y * other.y;
+  }
 }
