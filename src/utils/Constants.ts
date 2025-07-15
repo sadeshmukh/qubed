@@ -1,5 +1,8 @@
 export const PHYSICS = {
-  // GRAVITY: 0.5,
+  FORCE_SCALE: 1000, // can't keep too high -> physics instability
+  TORQUE_SCALE: 1000, // Same scaling for torque
+
+  GRAVITY: 0.5,
   // FRICTION: 0.99, // per tick
   // BOUNCE_DAMPING: 0.8,
 } as const;

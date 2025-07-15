@@ -40,11 +40,24 @@
         margin: 0 0 10px 0;
         color: #fff;
       }
+
+      #fps {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        color: white;
+        font-size: 14px;
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 4px 8px;
+        border-radius: 4px;
+        z-index: 10;
+      }
     </style>
   </head>
   <body>
     <div class="container">
       <canvas id="canvas"></canvas>
+      <div id="fps">FPS: <span id="fps-value">0</span></div>
     </div>
     <script type="module" src="./src/main.ts"></script>
   </body>
