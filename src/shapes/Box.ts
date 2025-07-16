@@ -11,9 +11,9 @@ export class Box extends RigidBody {
     position: Vector,
     width: number,
     height: number,
-    rotation: number = 0 // rad
+    rotation: number = 0
   ) {
-    const momentOfInertia = (1 / 12) * mass * (width ** 2 + height ** 2); // wild formula
+    const momentOfInertia = (1 / 12) * mass * (width ** 2 + height ** 2);
     super(mass, momentOfInertia, position, rotation);
     this.width = width;
     this.height = height;
@@ -33,5 +33,9 @@ export class Box extends RigidBody {
     return points.map((point) =>
       this.getWorldPoint(new Vector(point.x, point.y))
     );
+  }
+
+  getCollisionPoints(): Vector[] {
+    return this.getPoints().map((point) => new Vector(point.x, point.y));
   }
 }

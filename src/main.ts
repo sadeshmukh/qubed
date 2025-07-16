@@ -1,6 +1,7 @@
 import { World } from "./simulation/World";
 import { Box } from "./shapes/Box";
 import { Vector } from "./core/Vector";
+import { Wall } from "./shapes/Wall";
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 if (!canvas) {
@@ -20,8 +21,6 @@ function setupCanvas(callback: () => void) {
   canvas.height = squareSize;
   canvas.style.width = squareSize + "px";
   canvas.style.height = squareSize + "px";
-
-  // wait one frame
   requestAnimationFrame(() => {
     callback();
   });
@@ -36,8 +35,7 @@ function setupPhysics() {
   world = new World();
   world.setContext(ctx);
 
-  // 1000X1000 world coords
-  box1 = new Box(1, new Vector(200, 800), 80, 50);
+  box1 = new Box(2, new Vector(200, 800), 80, 50);
   box2 = new Box(2, new Vector(750, 600), 60, 60);
 
   box1.setDebugMode(true);
@@ -45,6 +43,35 @@ function setupPhysics() {
 
   world.addObject(box1);
   world.addObject(box2);
+
+  const wallThickness = 50;
+  const margin = wallThickness / 2;
+
+  const leftWall = new Wall(
+    new Vector(margin, margin),
+    new Vector(margin, world.worldHeight - margin),
+    wallThickness
+  );
+  const rightWall = new Wall(
+    new Vector(world.worldWidth - margin, margin),
+    new Vector(world.worldWidth - margin, world.worldHeight - margin),
+    wallThickness
+  );
+  const topWall = new Wall(
+    new Vector(margin, margin),
+    new Vector(world.worldWidth - margin, margin),
+    wallThickness
+  );
+  const bottomWall = new Wall(
+    new Vector(margin, world.worldHeight - margin),
+    new Vector(world.worldWidth - margin, world.worldHeight - margin),
+    wallThickness
+  );
+
+  world.addWall(leftWall);
+  world.addWall(rightWall);
+  world.addWall(topWall);
+  world.addWall(bottomWall);
 
   resetPhysics();
   isSetupComplete = true;
@@ -54,15 +81,11 @@ function resetPhysics() {
   if (!box1 || !box2) return;
 
   box1.reset(new Vector(200, 800), 0);
-  box2.reset(new Vector(750, 600), 0);
+  box2.reset(new Vector(750, 800), 0);
 
-  box1.applyImpulse(new Vector(50, 0));
-  // box2.rotate(Math.PI / 4);
-
-  box2.applyRotationImpulse(Math.PI / 16);
-  // alternative:
-  // box2.applyRotationImpulse(Math.PI / 4); // rotate exactly pi/4 rad
-  // box2.applyAngularImpulse(10); // direct angular velocity change
+  box1.applyImpulse(new Vector(-10000, 0));
+  box2.rotate(Math.PI / 8);
+  box1.applyRotationImpulse(Math.PI / 64);
 }
 
 window.addEventListener("resize", () => {
@@ -72,35 +95,37 @@ window.addEventListener("resize", () => {
 
 let lastTime = performance.now();
 let frameCount = 0;
-const FIXED_TIMESTEP = 1 / 60; // 60 FPS as baseline
+const FIXED_TIMESTEP = 1 / 60;
 
-function update(currentTime: number): void {
+function update(currentTime: number, tick: number): void {
+  tick++;
+
   if (!isSetupComplete) {
-    requestAnimationFrame(update);
+    requestAnimationFrame((currentTime) => update(currentTime, tick));
     return;
   }
 
   let deltaTime: number;
 
   if (frameCount < 3) {
-    // use fixed timestep for first few frames to ensure consistency
     deltaTime = FIXED_TIMESTEP;
   } else {
     deltaTime = (currentTime - lastTime) / 1000;
-    deltaTime = Math.min(deltaTime, FIXED_TIMESTEP * 2); // max 2x normal timestep
-    deltaTime = Math.max(deltaTime, FIXED_TIMESTEP / 2); // min 0.5x normal timestep
+    deltaTime = Math.min(deltaTime, FIXED_TIMESTEP * 2);
+    deltaTime = Math.max(deltaTime, FIXED_TIMESTEP / 2);
   }
 
   lastTime = currentTime;
   frameCount++;
 
-  fpsValueElement.textContent = Math.round(1 / deltaTime).toString();
-
-  world.tick(deltaTime);
-  requestAnimationFrame(update);
+  if (tick % 30 === 0) {
+    fpsValueElement.textContent = Math.round(1 / deltaTime).toString();
+  }
+  world.update(deltaTime);
+  requestAnimationFrame((currentTime) => update(currentTime, tick));
 }
 
 setupCanvas(() => {
   setupPhysics();
-  requestAnimationFrame((currentTime) => update(currentTime));
+  requestAnimationFrame((currentTime) => update(currentTime, 0));
 });

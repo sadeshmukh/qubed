@@ -89,7 +89,7 @@ export function drawVector(
   vector: Vector,
   color: string = "white",
   width: number = 2,
-  mode: "width" | "length" = "width" // draw as normalized vector growing logarithmically in width versus actual vector length
+  mode: "width" | "length" = "width"
 ): void {
   ctx.strokeStyle = color;
   ctx.lineWidth = width;

@@ -1,10 +1,7 @@
 export const PHYSICS = {
-  FORCE_SCALE: 1000, // can't keep too high -> physics instability
-  TORQUE_SCALE: 1000, // Same scaling for torque
-
+  FORCE_SCALE: 1000,
+  TORQUE_SCALE: 1000,
   GRAVITY: 0.5,
-  // FRICTION: 0.99, // per tick
-  // BOUNCE_DAMPING: 0.8,
 } as const;
 
 export const COLORS = {

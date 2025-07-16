@@ -2,20 +2,16 @@ import { Object } from "./Object";
 import { Vector } from "./Vector";
 import { PHYSICS } from "../utils/Constants";
 import { drawVector, drawLine } from "../rendering/DrawingUtils";
+import { Collidable } from "./Collidable";
 
-export class RigidBody extends Object {
-  // position: Vector;
+export class RigidBody extends Object implements Collidable {
   velocity: Vector;
-
   rotation: number;
-  angularVelocity: number;
-
+  public angularVelocity: number;
   mass: number;
-  momentOfInertia: number; // inertial resistance
-
+  momentOfInertia: number;
   private forceAccumulator: Vector;
   private torqueAccumulator: number;
-
   debugMode: boolean = false;
 
   constructor(
@@ -25,29 +21,22 @@ export class RigidBody extends Object {
     rotation: number = 0
   ) {
     super(position);
-
     this.position = position;
     this.velocity = new Vector();
-
     this.rotation = rotation;
     this.angularVelocity = 0;
-
     this.mass = mass;
     this.momentOfInertia = momentOfInertia;
-
     this.forceAccumulator = new Vector();
     this.torqueAccumulator = 0;
   }
 
   applyForce(force: Vector): void {
-    // apply at center of mass w/o rotation
     this.forceAccumulator = this.forceAccumulator.add(force);
   }
 
   applyForceAtPoint(force: Vector, point: Vector): void {
-    // apply with rotation about point
     this.forceAccumulator = this.forceAccumulator.add(force);
-
     const r = point.subtract(this.position);
     const torque = r.cross(force);
     this.torqueAccumulator += torque;
@@ -62,12 +51,11 @@ export class RigidBody extends Object {
   }
 
   applyAngularImpulse(angularImpulse: number): void {
-    // J = angular impulse, ω = ω + J/I
     this.angularVelocity += angularImpulse / this.momentOfInertia;
   }
 
   applyRotationImpulse(targetRotationRadians: number): void {
-    const requiredAngularVelocity = targetRotationRadians * 60; // Scale for reasonable speed
+    const requiredAngularVelocity = targetRotationRadians * 60;
     const angularImpulse = requiredAngularVelocity * this.momentOfInertia;
     this.applyAngularImpulse(angularImpulse);
   }
@@ -77,20 +65,16 @@ export class RigidBody extends Object {
   }
 
   integrate(dt: number): void {
-    // large timesteps cause instability
-    const clampedDeltaTime = Math.min(dt, 1 / 120); // Max 120 FPS minimum
+    const clampedDeltaTime = Math.min(dt, 1 / 120);
 
     const scaledForce = this.forceAccumulator.multiply(PHYSICS.FORCE_SCALE);
     const scaledTorque = this.torqueAccumulator * PHYSICS.TORQUE_SCALE;
 
-    const acceleration = scaledForce.divide(this.mass); // a = F/m
-    const angularAcceleration = scaledTorque / this.momentOfInertia; // α = torque/I
+    const acceleration = scaledForce.divide(this.mass);
+    const angularAcceleration = scaledTorque / this.momentOfInertia;
 
-    this.velocity = this.velocity.add(acceleration.multiply(clampedDeltaTime)); // v = v + at
+    this.velocity = this.velocity.add(acceleration.multiply(clampedDeltaTime));
     this.angularVelocity += angularAcceleration * clampedDeltaTime;
-    // friction damping?
-    // this.velocity = this.velocity.multiply(0.999);
-    // this.angularVelocity *= 0.999;
 
     this.position = this.position.add(this.velocity.multiply(clampedDeltaTime));
     this.rotation += this.angularVelocity * clampedDeltaTime;
@@ -120,6 +104,42 @@ export class RigidBody extends Object {
     return this.torqueAccumulator;
   }
 
+  getCollisionPoints(): Vector[] {
+    return [this.position];
+  }
+
+  getBoundingBox(): { min: Vector; max: Vector } {
+    const points = this.getCollisionPoints();
+    let minX = points[0].x,
+      minY = points[0].y;
+    let maxX = points[0].x,
+      maxY = points[0].y;
+
+    for (const point of points) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+
+    return {
+      min: new Vector(minX, minY),
+      max: new Vector(maxX, maxY),
+    };
+  }
+
+  getPosition(): Vector {
+    return this.position;
+  }
+
+  getVelocity(): Vector {
+    return this.velocity;
+  }
+
+  move(delta: Vector): void {
+    this.position = this.position.add(delta);
+  }
+
   reset(position: Vector, rotation: number = 0): void {
     this.position = position;
     this.velocity = new Vector();
@@ -138,15 +158,12 @@ export class RigidBody extends Object {
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
-    // draw shape to be overridden by subclasses
     this.drawShape(ctx);
-
     if (this.debugMode) {
       this.drawDebugVectors(ctx);
     }
   }
 
-  // override this method in subclasses to draw the actual shape
   protected drawShape(ctx: CanvasRenderingContext2D): void {
     super.draw(ctx);
   }
