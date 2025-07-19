@@ -39,6 +39,10 @@ export class Vector {
     const sin = Math.sin(angle);
     return new Vector(this.x * cos - this.y * sin, this.x * sin + this.y * cos);
   }
+
+  perpendicular(): Vector {
+    return new Vector(-this.y, this.x);
+  }
 }
 
 export const zero = new Vector(0, 0);

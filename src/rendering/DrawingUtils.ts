@@ -42,8 +42,7 @@ export function drawConnectedLines(
 
 export function drawCircle(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
+  position: Vector,
   radius: number,
   color: string = "red",
   width: number = 2,
@@ -52,7 +51,7 @@ export function drawCircle(
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
   ctx.beginPath();
-  ctx.arc(x, y, radius, 0, 2 * Math.PI);
+  ctx.arc(position.x, position.y, radius, 0, 2 * Math.PI);
   ctx.stroke();
   if (fill) {
     ctx.fillStyle = color;
@@ -77,11 +76,12 @@ export function drawPolygon(
     ctx.lineTo(points[i].x, points[i].y);
   }
   ctx.closePath();
-  ctx.stroke();
+
   if (fill) {
     ctx.fillStyle = color;
     ctx.fill();
   }
+  ctx.stroke();
 }
 
 export function drawVector(

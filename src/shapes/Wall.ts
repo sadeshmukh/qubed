@@ -1,100 +1,43 @@
-import { Object } from "../core/Object";
 import { Vector } from "../core/Vector";
-import { drawLine } from "../rendering/DrawingUtils";
-import { Collidable } from "../core/Collidable";
+import { drawPolygon, Point } from "../rendering/DrawingUtils";
+import { RigidBody } from "../core/RigidBody";
 
-export class Wall extends Object implements Collidable {
+export class Wall extends RigidBody {
   start: Vector;
   end: Vector;
   thickness: number;
-  direction: Vector;
+  private normal: Vector;
 
-  constructor(
-    start: Vector,
-    end: Vector,
-    thickness: number = 10,
-    direction?: Vector
-  ) {
-    super(start);
+  constructor(start: Vector, end: Vector, thickness: number = 10) {
+    const wallVector = end.subtract(start);
+    const position = start.add(wallVector.multiply(0.5));
+    super(Number.MAX_VALUE, Number.MAX_VALUE, position);
     this.start = start;
     this.end = end;
     this.thickness = thickness;
-
-    if (direction) {
-      this.direction = direction.normalize();
-    } else {
-      const wallVector = this.end.subtract(this.start);
-      this.direction = wallVector.normalize();
-    }
+    this.normal = wallVector.perpendicular().normalize();
   }
-
-  draw(ctx: CanvasRenderingContext2D) {
-    ctx.strokeStyle = "#333";
-    ctx.lineWidth = this.thickness;
-    ctx.lineCap = "round";
-    drawLine(ctx, this.start.x, this.start.y, this.end.x, this.end.y);
-  }
-
-  drawContactPoint(ctx: CanvasRenderingContext2D, contactPoint: Vector) {
-    const wallStart = this.start;
-    const wallEnd = this.end;
-    const wallVector = wallEnd.subtract(wallStart);
-    const wallDir = wallVector.normalize();
-    const wallLength = wallVector.magnitude();
-
-    const rel = contactPoint.subtract(wallStart);
-    const proj = rel.dot(wallDir);
-    const clampedProj = Math.max(0, Math.min(wallLength, proj));
-    const wallContactPoint = wallStart.add(wallDir.multiply(clampedProj));
-
-    const segmentLength = this.thickness * 2;
-    const segmentStart = wallContactPoint.subtract(
-      wallDir.multiply(segmentLength / 2)
-    );
-    const segmentEnd = wallContactPoint.add(
-      wallDir.multiply(segmentLength / 2)
-    );
-
-    ctx.strokeStyle = "#ff0000";
-    ctx.lineWidth = this.thickness;
-    ctx.lineCap = "round";
-    drawLine(ctx, segmentStart.x, segmentStart.y, segmentEnd.x, segmentEnd.y);
+  drawShape(ctx: CanvasRenderingContext2D) {
+    drawPolygon(ctx, this.getPoints(), "grey", 1, true);
   }
 
   getNormal(): Vector {
-    const normal = new Vector(-this.direction.y, this.direction.x);
-    return normal.normalize();
+    return this.normal;
   }
+  getPoints(): Point[] {
+    const wallVector = this.end.subtract(this.start);
+    const halfThickness = this.thickness / 2;
 
-  getLength(): number {
-    return this.end.subtract(this.start).magnitude();
+    const p1 = this.start.add(this.normal.multiply(halfThickness));
+    const p2 = this.end.add(this.normal.multiply(halfThickness));
+    const p3 = this.end.subtract(this.normal.multiply(halfThickness));
+    const p4 = this.start.subtract(this.normal.multiply(halfThickness));
+
+    return [
+      { x: p1.x, y: p1.y },
+      { x: p2.x, y: p2.y },
+      { x: p3.x, y: p3.y },
+      { x: p4.x, y: p4.y },
+    ];
   }
-
-  getCollisionPoints(): Vector[] {
-    return [this.start, this.end];
-  }
-
-  getBoundingBox(): { min: Vector; max: Vector } {
-    const minX = Math.min(this.start.x, this.end.x);
-    const minY = Math.min(this.start.y, this.end.y);
-    const maxX = Math.max(this.start.x, this.end.x);
-    const maxY = Math.max(this.start.y, this.end.y);
-
-    return {
-      min: new Vector(minX, minY),
-      max: new Vector(maxX, maxY),
-    };
-  }
-
-  getPosition(): Vector {
-    return this.position;
-  }
-
-  getVelocity(): Vector {
-    return new Vector(0, 0);
-  }
-
-  applyImpulse(impulse: Vector): void {}
-
-  move(delta: Vector): void {}
 }

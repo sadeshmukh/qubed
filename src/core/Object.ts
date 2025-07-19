@@ -7,6 +7,6 @@ export class Object {
   update(dt: number) {}
 
   draw(ctx: CanvasRenderingContext2D) {
-    drawCircle(ctx, this.position.x, this.position.y, 10, "red");
+    drawCircle(ctx, this.position, 10, "red");
   }
 }

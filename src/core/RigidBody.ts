@@ -13,6 +13,7 @@ export class RigidBody extends Object implements Collidable {
   private forceAccumulator: Vector;
   private torqueAccumulator: number;
   debugMode: boolean = false;
+  private contactPoints: Vector[] = [];
 
   constructor(
     mass: number,
@@ -50,6 +51,13 @@ export class RigidBody extends Object implements Collidable {
     this.velocity = this.velocity.add(impulse.divide(this.mass));
   }
 
+  applyImpulseAtPoint(impulse: Vector, point: Vector): void {
+    this.velocity = this.velocity.add(impulse.divide(this.mass));
+    const r = point.subtract(this.position);
+    const torque = r.cross(impulse);
+    this.angularVelocity += torque / this.momentOfInertia;
+  }
+
   applyAngularImpulse(angularImpulse: number): void {
     this.angularVelocity += angularImpulse / this.momentOfInertia;
   }
@@ -78,6 +86,21 @@ export class RigidBody extends Object implements Collidable {
 
     this.position = this.position.add(this.velocity.multiply(clampedDeltaTime));
     this.rotation += this.angularVelocity * clampedDeltaTime;
+
+    this.velocity = this.velocity.multiply(PHYSICS.AIR_RESISTANCE);
+    this.angularVelocity *= PHYSICS.ANGULAR_DAMPING;
+
+    const velocityMagnitude = this.velocity.magnitude();
+    if (velocityMagnitude > PHYSICS.MAX_VELOCITY) {
+      this.velocity = this.velocity.multiply(
+        PHYSICS.MAX_VELOCITY / velocityMagnitude
+      );
+    }
+
+    if (Math.abs(this.angularVelocity) > PHYSICS.MAX_ANGULAR_VELOCITY) {
+      this.angularVelocity =
+        Math.sign(this.angularVelocity) * PHYSICS.MAX_ANGULAR_VELOCITY;
+    }
 
     this.forceAccumulator = new Vector();
     this.torqueAccumulator = 0;
@@ -153,6 +176,14 @@ export class RigidBody extends Object implements Collidable {
     this.debugMode = enabled;
   }
 
+  setContactPoints(points: Vector[]): void {
+    this.contactPoints = points;
+  }
+
+  clearContactPoints(): void {
+    this.contactPoints = [];
+  }
+
   update(dt: number): void {
     this.integrate(dt);
   }
@@ -209,5 +240,12 @@ export class RigidBody extends Object implements Collidable {
     }
 
     ctx.restore();
+
+    for (const contactPoint of this.contactPoints) {
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+      ctx.arc(contactPoint.x, contactPoint.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 }
