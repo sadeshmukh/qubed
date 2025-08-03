@@ -1,4 +1,5 @@
 import { Vector } from "../core/Vector";
+import { Theme, getTheme } from "./themes";
 
 export const PHYSICS = {
   FORCE_SCALE: 1000,
@@ -44,17 +45,47 @@ export let COLORS = {
   CONTACT_POINT: "#fbbf24",
   VELOCITY_VECTOR: "#10b981",
   ANGULAR_VECTOR: "#f472b6",
+  TRAIL: "#ffffff",
 };
 
-export function applyColorTheme(theme: {[key: string]: string}) {
-  COLORS.BACKGROUND = theme.background || COLORS.BACKGROUND;
-  COLORS.BOX = theme.box || COLORS.BOX;
-  COLORS.HEXAGON = theme.hexagon || COLORS.HEXAGON;
-  COLORS.PARTICLE = theme.particle || COLORS.PARTICLE;
-  COLORS.BOUNDARY = theme.boundary || COLORS.BOUNDARY;
-  COLORS.CONTACT_POINT = theme.contactPoint || COLORS.CONTACT_POINT;
-  COLORS.VELOCITY_VECTOR = theme.velocityVector || COLORS.VELOCITY_VECTOR;
-  COLORS.ANGULAR_VECTOR = theme.angularVector || COLORS.ANGULAR_VECTOR;
+export let CURRENT_THEME: Theme = getTheme("default");
+
+let colorIndex = 0;
+const objectColorMap = new Map<object, string>();
+
+export function getNextObjectColor(object: object): string {
+  if (objectColorMap.has(object)) {
+    return objectColorMap.get(object)!;
+  }
+
+  const color =
+    CURRENT_THEME.objectPalette[
+      colorIndex % CURRENT_THEME.objectPalette.length
+    ];
+  colorIndex++;
+  objectColorMap.set(object, color);
+  return color;
+}
+
+export function resetObjectColors() {
+  colorIndex = 0;
+  objectColorMap.clear();
+}
+
+export function applyColorTheme(themeName: string) {
+  CURRENT_THEME = getTheme(themeName);
+
+  COLORS.BACKGROUND = CURRENT_THEME.background;
+  COLORS.BOX = CURRENT_THEME.box;
+  COLORS.HEXAGON = CURRENT_THEME.hexagon;
+  COLORS.PARTICLE = CURRENT_THEME.particle;
+  COLORS.BOUNDARY = CURRENT_THEME.boundary;
+  COLORS.CONTACT_POINT = CURRENT_THEME.contactPoint;
+  COLORS.VELOCITY_VECTOR = CURRENT_THEME.velocityVector;
+  COLORS.ANGULAR_VECTOR = CURRENT_THEME.angularVector;
+  COLORS.TRAIL = CURRENT_THEME.trail;
+
+  resetObjectColors();
 }
 
 export const CANVAS = {

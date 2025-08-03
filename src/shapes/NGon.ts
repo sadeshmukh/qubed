@@ -1,7 +1,7 @@
 import { RigidBody } from "../core/RigidBody";
 import { Vector } from "../core/Vector";
 import { drawPolygon, Point } from "../rendering/DrawingUtils";
-import { COLORS } from "../utils/Constants";
+import { getNextObjectColor } from "../utils/Constants";
 
 export class NGon extends RigidBody {
   radius: number;
@@ -25,7 +25,7 @@ export class NGon extends RigidBody {
   }
 
   drawShape(ctx: CanvasRenderingContext2D) {
-    const color = this.sides === 6 ? COLORS.HEXAGON : COLORS.PARTICLE;
+    const color = getNextObjectColor(this);
     drawPolygon(ctx, this.getPoints(), color, 3, true);
   }
 

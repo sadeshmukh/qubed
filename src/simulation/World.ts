@@ -9,9 +9,13 @@ import {
   PHYSICS,
   WIND,
   COLORS,
+  CURRENT_THEME,
   setWindForce,
   applyColorTheme,
+  getNextObjectColor,
+  resetObjectColors,
 } from "../utils/Constants";
+import { getTextureColor, TEXTURE_OPTIONS, THEMES } from "../utils/themes";
 import { Box } from "../shapes/Box";
 import { NGon } from "../shapes/NGon";
 
@@ -35,7 +39,17 @@ export class World {
   private isPaused: boolean = false;
   private contactPointDuration: number = 1.0;
   private createMode: boolean = false;
-  private pendingObjectSettings: any = null;
+  private cursorTrailEnabled: boolean = false;
+  private cursorTrailLength: number = 10;
+  private cursorTrailFade: number = 0.8;
+  private cursorTrailPoints: Array<{ position: Vector; time: number }> = [];
+  private backgroundTexture: string = "none";
+  private textureImages: Map<string, HTMLImageElement> = new Map();
+  private deleteMode: boolean = false;
+  private totalMomentum: Vector = new Vector(0, 0);
+  private totalAngularMomentum: number = 0;
+  private frameSkipCounter: number = 0;
+  private lastCollisionCheck: number = 0;
 
   worldWidth: number = WORLD.COORDINATE_SYSTEM;
   worldHeight: number = WORLD.COORDINATE_SYSTEM;
@@ -89,6 +103,11 @@ export class World {
     }
 
     this.updateFadingContactPoints();
+
+    if (this.frameSkipCounter % 5 === 0) {
+      this.updateMomentumDisplay();
+    }
+
     this.render();
 
     if (this.selectedObject) {
@@ -138,6 +157,12 @@ export class World {
       }
     }
 
+    // optimize: skip detailed collision checks if there are too many objects
+    // also means problems :D
+    const shouldSkipDetailedChecks = this.objects.length > 25;
+    this.frameSkipCounter++;
+
+    // wall collisions (always check these)
     for (const object of this.objects) {
       if (object instanceof RigidBody) {
         for (const wall of this.walls) {
@@ -152,12 +177,64 @@ export class World {
       }
     }
 
+    if (shouldSkipDetailedChecks && this.frameSkipCounter % 2 !== 0) {
+      return;
+    }
+
+    // use spatial partitioning for performance with many objects
+    if (this.objects.length > 15) {
+      this.checkCollisionsOptimized();
+    } else {
+      this.checkCollisionsBruteForce();
+    }
+  }
+
+  private checkCollisionsBruteForce() {
     for (let i = 0; i < this.objects.length; i++) {
       for (let j = i + 1; j < this.objects.length; j++) {
         const obj1 = this.objects[i];
         const obj2 = this.objects[j];
 
         if (obj1 instanceof RigidBody && obj2 instanceof RigidBody) {
+          const info = CollisionSystem.checkCollision(obj1, obj2);
+          if (info) {
+            this.collisions.push(info);
+            this.contactPoints.push(info.contactPoint);
+            this.addFadingContactPoint(info.contactPoint);
+            obj1.setContactPoints([info.contactPoint]);
+            obj2.setContactPoints([info.contactPoint]);
+          }
+        }
+      }
+    }
+  }
+
+  private checkCollisionsOptimized() {
+    // partition world into cell?
+    // no clue how well this works but it has worked in the past for me, so we'll assume it works
+    const cellSize = 150;
+    const cells: Map<string, RigidBody[]> = new Map();
+
+    // place objects into cells
+    for (const object of this.objects) {
+      if (object instanceof RigidBody) {
+        const cellX = Math.floor(object.position.x / cellSize);
+        const cellY = Math.floor(object.position.y / cellSize);
+        const cellKey = `${cellX},${cellY}`;
+
+        if (!cells.has(cellKey)) {
+          cells.set(cellKey, []);
+        }
+        cells.get(cellKey)!.push(object);
+      }
+    }
+
+    // check collisions only within current + adjacent cells
+    for (const [cellKey, cellObjects] of cells) {
+      for (let i = 0; i < cellObjects.length; i++) {
+        for (let j = i + 1; j < cellObjects.length; j++) {
+          const obj1 = cellObjects[i];
+          const obj2 = cellObjects[j];
           const info = CollisionSystem.checkCollision(obj1, obj2);
           if (info) {
             this.collisions.push(info);
@@ -185,6 +262,8 @@ export class World {
     this.ctx.fillStyle = COLORS.BACKGROUND;
     this.ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
 
+    this.drawBackgroundTexture();
+
     this.ctx.save();
     this.ctx.scale(
       this.screenWidth / this.worldWidth,
@@ -204,6 +283,7 @@ export class World {
     }
 
     this.drawDebugInfo();
+    this.drawCursorTrail();
 
     this.ctx.restore();
   }
@@ -264,6 +344,37 @@ export class World {
     this.ctx.globalAlpha = 1.0;
   }
 
+  private drawCursorTrail() {
+    if (
+      !this.ctx ||
+      !this.cursorTrailEnabled ||
+      this.cursorTrailPoints.length < 2
+    ) {
+      return;
+    }
+
+    this.ctx.save();
+    this.ctx.lineWidth = 2;
+    this.ctx.lineCap = "round";
+    this.ctx.lineJoin = "round";
+
+    for (let i = 1; i < this.cursorTrailPoints.length; i++) {
+      const prev = this.cursorTrailPoints[i - 1];
+      const curr = this.cursorTrailPoints[i];
+
+      const alpha = (i / this.cursorTrailPoints.length) * this.cursorTrailFade;
+      this.ctx.globalAlpha = alpha;
+      this.ctx.strokeStyle = COLORS.TRAIL;
+
+      this.ctx.beginPath();
+      this.ctx.moveTo(prev.position.x, prev.position.y);
+      this.ctx.lineTo(curr.position.x, curr.position.y);
+      this.ctx.stroke();
+    }
+
+    this.ctx.restore();
+  }
+
   public setupControlPanel() {
     const controlBtn = document.getElementById(
       "control-btn"
@@ -275,6 +386,7 @@ export class World {
     if (!controlBtn || !controlPanel) return;
 
     controlBtn.addEventListener("click", () => {
+      this.closeAllPanelsExcept("control-panel");
       controlPanel.style.display =
         controlPanel.style.display === "none" ? "block" : "none";
     });
@@ -305,9 +417,13 @@ export class World {
     this.setupTimeSpeedControl();
     this.setupContactDurationControl();
     this.setupThemeControls();
+    this.setupBackgroundTexture();
     this.setupInspectorMode();
+    this.setupDeleteMode();
+    this.setupMomentumMonitoring();
     this.setupPauseButton();
-    this.setupCreateModal();
+    this.setupCreatePanel();
+    this.setupCursorPanel();
     this.setupActionButtons();
   }
 
@@ -385,45 +501,29 @@ export class World {
   }
 
   private resetObjects() {
-    const worldCenter = new Vector(this.worldWidth / 2, this.worldHeight / 2);
-    const rigidBodies = this.objects.filter(
-      (obj) => obj instanceof RigidBody
-    ) as RigidBody[];
-    const placedPositions: Vector[] = [];
+    this.objects = this.objects.slice(0, 2);
 
-    for (const object of rigidBodies) {
-      let attempts = 0;
-      let validPosition = false;
-      let newPosition = worldCenter;
+    resetObjectColors();
 
-      while (!validPosition && attempts < 50) {
-        newPosition = worldCenter.add(
-          new Vector((Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300)
-        );
+    if (this.objects.length >= 1 && this.objects[0] instanceof RigidBody) {
+      const obj1 = this.objects[0] as RigidBody;
+      obj1.position = new Vector(200, 200);
+      obj1.velocity = new Vector(-500, 0);
+      obj1.angularVelocity = Math.PI / 64;
+      obj1.rotation = 0;
+    }
 
-        // check if overlap with existing objects
-        validPosition = true;
-        for (const placedPos of placedPositions) {
-          const distance = newPosition.subtract(placedPos).magnitude();
-          if (distance < 80) {
-            validPosition = false;
-            break;
-          }
-        }
-        attempts++;
-      }
-
-      if (validPosition) {
-        object.position = newPosition;
-        object.velocity = new Vector(0, 0);
-        object.angularVelocity = 0;
-        object.rotation = 0;
-        placedPositions.push(newPosition);
-      }
+    if (this.objects.length >= 2 && this.objects[1] instanceof RigidBody) {
+      const obj2 = this.objects[1] as RigidBody;
+      obj2.position = new Vector(750, 200);
+      obj2.velocity = new Vector(0, 0);
+      obj2.angularVelocity = 0;
+      obj2.rotation = Math.PI / 8;
     }
 
     // clear contact points
     this.fadingContactPoints = [];
+    this.selectedObject = null;
   }
 
   private toggleDebugMode() {
@@ -455,62 +555,33 @@ export class World {
     const themeSelect = document.getElementById(
       "theme-select"
     ) as HTMLSelectElement;
+    if (!themeSelect) return;
 
-    if (themeSelect) {
-      themeSelect.addEventListener("change", () => {
-        this.applyTheme(themeSelect.value);
-      });
-    }
+    // clear any existing static options and repopulate from THEMES
+    themeSelect.innerHTML = "";
+
+    const themeEntries = globalThis.Object.keys(THEMES) as Array<
+      keyof typeof THEMES
+    >;
+    themeEntries.forEach((key) => {
+      const theme = THEMES[key];
+      const option = document.createElement("option");
+      option.value = key;
+      option.textContent = theme.name;
+      themeSelect.appendChild(option);
+    });
+
+    // set current selection based on loaded settings or default
+    themeSelect.value = this.currentTheme;
+
+    themeSelect.addEventListener("change", () => {
+      this.applyTheme(themeSelect.value);
+    });
   }
 
   private applyTheme(theme: string) {
     this.currentTheme = theme;
-    const themes = {
-      default: {
-        background: "#0a0a0f",
-        box: "#3b82f6",
-        hexagon: "#f59e0b",
-        particle: "#ef4444",
-        boundary: "#374151",
-        contactPoint: "#fbbf24",
-        velocityVector: "#10b981",
-        angularVector: "#f472b6",
-      },
-      neon: {
-        background: "#000509",
-        box: "#00ffff",
-        hexagon: "#ff00ff",
-        particle: "#ffff00",
-        boundary: "#ff0080",
-        contactPoint: "#00ff00",
-        velocityVector: "#ff8000",
-        angularVector: "#8000ff",
-      },
-      sunset: {
-        background: "#1a0f0a",
-        box: "#ff6b35",
-        hexagon: "#f7931e",
-        particle: "#ffd23f",
-        boundary: "#c1272d",
-        contactPoint: "#ffad3b",
-        velocityVector: "#ff8c69",
-        angularVector: "#ff69b4",
-      },
-      minimal: {
-        background: "#fafafa",
-        box: "#2d3748",
-        hexagon: "#4a5568",
-        particle: "#718096",
-        boundary: "#1a202c",
-        contactPoint: "#e53e3e",
-        velocityVector: "#38a169",
-        angularVector: "#805ad5",
-      },
-    };
-
-    const selectedTheme =
-      themes[theme as keyof typeof themes] || themes.default;
-    applyColorTheme(selectedTheme);
+    applyColorTheme(theme);
     this.saveSettings();
   }
 
@@ -545,7 +616,12 @@ export class World {
 
     if (canvas) {
       canvas.addEventListener("click", (event) => {
-        if (!this.inspectorMode) return;
+        if (this.createMode) {
+          this.handleCreateClick(event);
+          return;
+        }
+
+        if (!this.inspectorMode && !this.deleteMode) return;
 
         const rect = canvas.getBoundingClientRect();
         const screenX = event.clientX - rect.left;
@@ -554,12 +630,17 @@ export class World {
         const worldPos = this.screenToWorld(new Vector(screenX, screenY));
 
         // find the clicked object
-        for (const object of this.objects) {
+        for (let i = 0; i < this.objects.length; i++) {
+          const object = this.objects[i];
           if (object instanceof RigidBody) {
             const distance = object.position.subtract(worldPos).magnitude();
             if (distance < 50) {
-              this.selectedObject = object;
-              this.updateInspector();
+              if (this.deleteMode) {
+                this.objects.splice(i, 1);
+              } else if (this.inspectorMode) {
+                this.selectedObject = object;
+                this.updateInspector();
+              }
               break;
             }
           }
@@ -579,6 +660,12 @@ export class World {
     const angularEl = document.getElementById(
       "inspector-angular"
     ) as HTMLSpanElement;
+    const kineticEl = document.getElementById(
+      "inspector-kinetic"
+    ) as HTMLSpanElement;
+    const rotationalEl = document.getElementById(
+      "inspector-rotational"
+    ) as HTMLSpanElement;
 
     if (typeEl && massEl && velocityEl && angularEl) {
       typeEl.textContent = this.selectedObject.constructor.name;
@@ -587,6 +674,18 @@ export class World {
         .magnitude()
         .toFixed(1);
       angularEl.textContent = this.selectedObject.angularVelocity.toFixed(2);
+    }
+    if (kineticEl && rotationalEl) {
+      const kinetic =
+        (this.selectedObject.velocity.magnitude() ** 2 *
+          this.selectedObject.mass) /
+        2;
+      const rotational =
+        (this.selectedObject.angularVelocity ** 2 *
+          this.selectedObject.momentOfInertia) /
+        2;
+      kineticEl.textContent = kinetic.toFixed(2);
+      rotationalEl.textContent = rotational.toFixed(2);
     }
 
     // render object in INSPECTOR canvas
@@ -637,7 +736,7 @@ export class World {
       }
       ctx.closePath();
 
-      const color = sides === 6 ? COLORS.HEXAGON : COLORS.PARTICLE;
+      const color = getNextObjectColor(this.selectedObject);
       ctx.strokeStyle = color;
       ctx.fillStyle = color + "40";
       ctx.lineWidth = 2;
@@ -707,57 +806,52 @@ export class World {
     }
   }
 
-  private setupCreateModal() {
+  private setupCreatePanel() {
     const createBtn = document.getElementById(
       "create-btn"
     ) as HTMLButtonElement;
-    const modal = document.getElementById("create-modal") as HTMLDivElement;
-    const closeBtn = document.getElementById(
-      "close-modal"
-    ) as HTMLButtonElement;
-    const cancelBtn = document.getElementById(
-      "create-cancel"
-    ) as HTMLButtonElement;
-    const confirmBtn = document.getElementById(
-      "create-confirm"
+    const createPanel = document.getElementById(
+      "create-panel"
+    ) as HTMLDivElement;
+    const placeModeCheckbox = document.getElementById(
+      "place-mode"
+    ) as HTMLInputElement;
+    const createRandomBtn = document.getElementById(
+      "create-random"
     ) as HTMLButtonElement;
     const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 
-    if (createBtn && modal) {
+    if (createBtn && createPanel) {
       createBtn.addEventListener("click", () => {
-        this.openCreateModal();
+        this.closeAllPanelsExcept("create-panel");
+        createPanel.style.display =
+          createPanel.style.display === "none" ? "block" : "none";
       });
     }
 
-    if (closeBtn) {
-      closeBtn.addEventListener("click", () => {
-        this.closeCreateModal();
+    if (placeModeCheckbox) {
+      placeModeCheckbox.addEventListener("change", () => {
+        this.createMode = placeModeCheckbox.checked;
+        if (canvas) {
+          if (this.createMode) {
+            canvas.classList.add("create-cursor");
+          } else {
+            canvas.classList.remove("create-cursor");
+          }
+        }
       });
     }
 
-    if (cancelBtn) {
-      cancelBtn.addEventListener("click", () => {
-        this.closeCreateModal();
-      });
-    }
-
-    if (confirmBtn) {
-      confirmBtn.addEventListener("click", () => {
-        this.startCreateMode();
+    if (createRandomBtn) {
+      createRandomBtn.addEventListener("click", () => {
+        this.createRandomObject();
       });
     }
 
     // Set up the dynamic form controls
     this.setupCreateFormControls();
 
-    // Set up canvas click handler for creation
-    if (canvas) {
-      canvas.addEventListener("click", (event) => {
-        if (this.createMode) {
-          this.handleCreateClick(event);
-        }
-      });
-    }
+    // Canvas click handler is set up in setupCanvasClickHandler()
   }
 
   private setupCreateFormControls() {
@@ -842,83 +936,106 @@ export class World {
     }
   }
 
-  private openCreateModal() {
-    const modal = document.getElementById("create-modal") as HTMLDivElement;
-    const body = document.body;
+  private createRandomObject() {
+    const worldCenter = new Vector(this.worldWidth / 2, this.worldHeight / 2);
+    let attempts = 0;
+    let validPosition = false;
+    let newPosition = worldCenter;
 
-    if (modal) {
-      modal.style.display = "flex";
-      body.classList.add("modal-open");
+    while (!validPosition && attempts < 50) {
+      newPosition = worldCenter.add(
+        new Vector((Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300)
+      );
+
+      validPosition = !this.checkOverlapAtPosition(newPosition);
+      attempts++;
+    }
+
+    if (validPosition) {
+      this.createObjectAtPosition(newPosition);
     }
   }
 
-  private closeCreateModal() {
-    const modal = document.getElementById("create-modal") as HTMLDivElement;
-    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-    const body = document.body;
+  private setupCursorPanel() {
+    const cursorBtn = document.getElementById(
+      "cursor-btn"
+    ) as HTMLButtonElement;
+    const cursorPanel = document.getElementById(
+      "cursor-panel"
+    ) as HTMLDivElement;
+    const trailCheckbox = document.getElementById(
+      "cursor-trail"
+    ) as HTMLInputElement;
+    const trailLengthSlider = document.getElementById(
+      "trail-length"
+    ) as HTMLInputElement;
+    const trailLengthValue = document.getElementById(
+      "trail-length-value"
+    ) as HTMLSpanElement;
+    const trailFadeSlider = document.getElementById(
+      "trail-fade"
+    ) as HTMLInputElement;
+    const trailFadeValue = document.getElementById(
+      "trail-fade-value"
+    ) as HTMLSpanElement;
 
-    if (modal) {
-      modal.style.display = "none";
-      body.classList.remove("modal-open");
+    if (cursorBtn && cursorPanel) {
+      cursorBtn.addEventListener("click", () => {
+        this.closeAllPanelsExcept("cursor-panel");
+        cursorPanel.style.display =
+          cursorPanel.style.display === "none" ? "block" : "none";
+      });
     }
 
-    if (canvas) {
-      canvas.classList.remove("create-cursor");
+    if (trailCheckbox) {
+      trailCheckbox.addEventListener("change", () => {
+        this.cursorTrailEnabled = trailCheckbox.checked;
+        if (!this.cursorTrailEnabled) {
+          this.cursorTrailPoints = [];
+        }
+      });
     }
 
-    this.createMode = false;
-    this.pendingObjectSettings = null;
+    if (trailLengthSlider && trailLengthValue) {
+      trailLengthSlider.addEventListener("input", () => {
+        this.cursorTrailLength = parseInt(trailLengthSlider.value);
+        trailLengthValue.textContent = trailLengthSlider.value;
+      });
+    }
+
+    if (trailFadeSlider && trailFadeValue) {
+      trailFadeSlider.addEventListener("input", () => {
+        this.cursorTrailFade = parseFloat(trailFadeSlider.value);
+        trailFadeValue.textContent = parseFloat(trailFadeSlider.value).toFixed(
+          1
+        );
+      });
+    }
+
+    this.setupCursorTracking();
   }
 
-  private startCreateMode() {
-    // gather all settings from the form
-    const typeSelect = document.getElementById(
-      "create-type"
-    ) as HTMLSelectElement;
-    const massSlider = document.getElementById(
-      "create-mass"
-    ) as HTMLInputElement;
-    const widthSlider = document.getElementById(
-      "create-width"
-    ) as HTMLInputElement;
-    const heightSlider = document.getElementById(
-      "create-height"
-    ) as HTMLInputElement;
-    const radiusSlider = document.getElementById(
-      "create-radius"
-    ) as HTMLInputElement;
-    const velXInput = document.getElementById(
-      "create-vel-x"
-    ) as HTMLInputElement;
-    const velYInput = document.getElementById(
-      "create-vel-y"
-    ) as HTMLInputElement;
-    const angularSlider = document.getElementById(
-      "create-angular"
-    ) as HTMLInputElement;
+  private closeAllPanelsExcept(exceptId?: string) {
+    const controlPanel = document.getElementById(
+      "control-panel"
+    ) as HTMLDivElement;
+    const createPanel = document.getElementById(
+      "create-panel"
+    ) as HTMLDivElement;
+    const cursorPanel = document.getElementById(
+      "cursor-panel"
+    ) as HTMLDivElement;
 
-    this.pendingObjectSettings = {
-      type: typeSelect?.value || "box",
-      mass: parseFloat(massSlider?.value || "2"),
-      width: parseInt(widthSlider?.value || "60"),
-      height: parseInt(heightSlider?.value || "60"),
-      radius: parseInt(radiusSlider?.value || "30"),
-      velocityX: parseFloat(velXInput?.value || "0"),
-      velocityY: parseFloat(velYInput?.value || "0"),
-      angularVelocity: parseFloat(angularSlider?.value || "0"),
-    };
-
-    this.createMode = true;
-    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-    if (canvas) {
-      canvas.classList.add("create-cursor");
-    }
-
-    this.closeCreateModal();
+    if (controlPanel && exceptId !== "control-panel")
+      controlPanel.style.display = "none";
+    if (createPanel && exceptId !== "create-panel")
+      createPanel.style.display = "none";
+    if (cursorPanel && exceptId !== "cursor-panel")
+      cursorPanel.style.display = "none";
   }
 
   private handleCreateClick(event: MouseEvent) {
-    if (!this.createMode || !this.pendingObjectSettings) return;
+    if (!this.createMode) return;
 
     const canvas = event.target as HTMLCanvasElement;
     const rect = canvas.getBoundingClientRect();
@@ -950,9 +1067,7 @@ export class World {
   }
 
   private createObjectAtPosition(position: Vector) {
-    if (!this.pendingObjectSettings) return;
-
-    const settings = this.pendingObjectSettings;
+    const settings = this.getCurrentObjectSettings();
     let newObject: RigidBody;
 
     if (settings.type === "box") {
@@ -979,13 +1094,301 @@ export class World {
     newObject.angularVelocity = settings.angularVelocity;
 
     this.addObject(newObject);
+  }
 
-    this.createMode = false;
-    this.pendingObjectSettings = null;
+  private getCurrentObjectSettings() {
+    const typeSelect = document.getElementById(
+      "create-type"
+    ) as HTMLSelectElement;
+    const massSlider = document.getElementById(
+      "create-mass"
+    ) as HTMLInputElement;
+    const widthSlider = document.getElementById(
+      "create-width"
+    ) as HTMLInputElement;
+    const heightSlider = document.getElementById(
+      "create-height"
+    ) as HTMLInputElement;
+    const radiusSlider = document.getElementById(
+      "create-radius"
+    ) as HTMLInputElement;
+    const velXInput = document.getElementById(
+      "create-vel-x"
+    ) as HTMLInputElement;
+    const velYInput = document.getElementById(
+      "create-vel-y"
+    ) as HTMLInputElement;
+    const angularSlider = document.getElementById(
+      "create-angular"
+    ) as HTMLInputElement;
 
+    return {
+      type: typeSelect?.value || "box",
+      mass: parseFloat(massSlider?.value || "2"),
+      width: parseInt(widthSlider?.value || "60"),
+      height: parseInt(heightSlider?.value || "60"),
+      radius: parseInt(radiusSlider?.value || "30"),
+      velocityX: parseFloat(velXInput?.value || "0"),
+      velocityY: parseFloat(velYInput?.value || "0"),
+      angularVelocity: parseFloat(angularSlider?.value || "0"),
+    };
+  }
+
+  private setupCursorTracking() {
     const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+
     if (canvas) {
-      canvas.classList.remove("create-cursor");
+      canvas.addEventListener("mousemove", (event) => {
+        if (!this.cursorTrailEnabled) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const screenX = event.clientX - rect.left;
+        const screenY = event.clientY - rect.top;
+        const worldPos = this.screenToWorld(new Vector(screenX, screenY));
+
+        this.cursorTrailPoints.push({
+          position: worldPos,
+          time: this.currentTime,
+        });
+
+        // keep only recent points
+        while (this.cursorTrailPoints.length > this.cursorTrailLength) {
+          this.cursorTrailPoints.shift();
+        }
+      });
+    }
+  }
+
+  private setupDeleteMode() {
+    const deleteCheckbox = document.getElementById(
+      "delete-mode"
+    ) as HTMLInputElement;
+    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+
+    if (deleteCheckbox && canvas) {
+      deleteCheckbox.addEventListener("change", () => {
+        this.deleteMode = deleteCheckbox.checked;
+        if (this.deleteMode) {
+          canvas.style.cursor = "crosshair";
+          const inspectorCheckbox = document.getElementById(
+            "inspector-mode"
+          ) as HTMLInputElement;
+          if (inspectorCheckbox) {
+            inspectorCheckbox.checked = false;
+            this.inspectorMode = false;
+          }
+        } else {
+          canvas.style.cursor = "default";
+        }
+        this.saveSettings();
+      });
+    }
+  }
+
+  private setupMomentumMonitoring() {
+    // TODO
+  }
+
+  private updateMomentumDisplay() {
+    this.totalMomentum = new Vector(0, 0);
+    this.totalAngularMomentum = 0;
+
+    for (const object of this.objects) {
+      if (object instanceof RigidBody) {
+        // mv
+        const momentum = object.velocity.multiply(object.mass);
+        this.totalMomentum = this.totalMomentum.add(momentum);
+
+        // Iw
+        this.totalAngularMomentum +=
+          object.momentOfInertia * object.angularVelocity;
+      }
+    }
+
+    const linearMomentumEl = document.getElementById("linear-momentum");
+    const angularMomentumEl = document.getElementById("angular-momentum");
+    const objectCountEl = document.getElementById("object-count");
+
+    if (linearMomentumEl) {
+      linearMomentumEl.textContent = this.totalMomentum.magnitude().toFixed(1);
+    }
+    if (angularMomentumEl) {
+      angularMomentumEl.textContent = Math.abs(
+        this.totalAngularMomentum
+      ).toFixed(1);
+    }
+    if (objectCountEl) {
+      objectCountEl.textContent = this.objects.length.toString();
+    }
+  }
+
+  private setupBackgroundTexture() {
+    const textureSelect = document.getElementById(
+      "background-texture"
+    ) as HTMLSelectElement;
+
+    if (textureSelect) {
+      // clear existing options
+      textureSelect.innerHTML = "";
+
+      // populate options from TEXTURE_OPTIONS
+      for (const key in TEXTURE_OPTIONS) {
+        const texture = TEXTURE_OPTIONS[key];
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = texture.name;
+        textureSelect.appendChild(option);
+      }
+
+      textureSelect.addEventListener("change", () => {
+        this.backgroundTexture = textureSelect.value;
+        this.saveSettings();
+      });
+    }
+  }
+
+  private drawBackgroundTexture() {
+    if (!this.ctx || this.backgroundTexture === "none") {
+      return;
+    }
+
+    this.ctx.save();
+    this.ctx.globalAlpha = CURRENT_THEME.textureOpacity;
+
+    const textureOption = TEXTURE_OPTIONS[this.backgroundTexture];
+
+    if (textureOption?.url) {
+      this.drawExternalTexture(textureOption.url);
+    } else {
+      // manually draw built-in textures
+      switch (this.backgroundTexture) {
+        case "grid":
+          this.drawGridTexture();
+          break;
+        case "dots":
+          this.drawDotsTexture();
+          break;
+        case "fabric":
+          this.drawFabricTexture();
+          break;
+        default:
+          break;
+      }
+    }
+
+    this.ctx.restore();
+  }
+
+  private drawGridTexture() {
+    if (!this.ctx) return;
+
+    const gridSize = 50;
+    this.ctx.strokeStyle = getTextureColor(CURRENT_THEME);
+    this.ctx.lineWidth = 1;
+
+    // vertical lines
+    for (let x = 0; x <= this.screenWidth; x += gridSize) {
+      this.ctx.beginPath();
+      this.ctx.moveTo(x, 0);
+      this.ctx.lineTo(x, this.screenHeight);
+      this.ctx.stroke();
+    }
+
+    // horizontal lines
+    for (let y = 0; y <= this.screenHeight; y += gridSize) {
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, y);
+      this.ctx.lineTo(this.screenWidth, y);
+      this.ctx.stroke();
+    }
+  }
+
+  private drawDotsTexture() {
+    if (!this.ctx) return;
+
+    const dotSpacing = 30;
+    const dotSize = 2;
+    this.ctx.fillStyle = getTextureColor(CURRENT_THEME);
+
+    for (let x = dotSpacing; x < this.screenWidth; x += dotSpacing) {
+      for (let y = dotSpacing; y < this.screenHeight; y += dotSpacing) {
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, dotSize, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
+  }
+
+  private drawNoiseTexture() {
+    if (!this.ctx) return;
+
+    const imageData = this.ctx.createImageData(
+      this.screenWidth,
+      this.screenHeight
+    );
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const noise = Math.random() * 255;
+      data[i] = noise; // red
+      data[i + 1] = noise; // green
+      data[i + 2] = noise; // blue
+      data[i + 3] = 25; // alpha (very low opacity)
+    }
+
+    this.ctx.putImageData(imageData, 0, 0);
+  }
+
+  private drawFabricTexture() {
+    if (!this.ctx) return;
+
+    const weaveSize = 4;
+    this.ctx.fillStyle = getTextureColor(CURRENT_THEME);
+
+    for (let x = 0; x < this.screenWidth; x += weaveSize * 2) {
+      for (let y = 0; y < this.screenHeight; y += weaveSize * 2) {
+        // create a simple weave pattern
+        if ((x / weaveSize + y / weaveSize) % 2) {
+          this.ctx.fillRect(x, y, weaveSize, weaveSize);
+          this.ctx.fillRect(x + weaveSize, y + weaveSize, weaveSize, weaveSize);
+        }
+      }
+    }
+  }
+
+  private drawExternalTexture(url: string) {
+    if (!this.ctx) return;
+
+    let image = this.textureImages.get(url);
+
+    if (!image) {
+      image = new Image();
+      image.crossOrigin = "anonymous";
+
+      image.onload = () => {
+        this.render();
+      };
+
+      image.onerror = () => {
+        this.textureImages.delete(url);
+      };
+
+      image.src = url;
+      this.textureImages.set(url, image);
+
+      // fallback to dots while loading
+      this.drawDotsTexture();
+      return;
+    }
+
+    if (image.complete && image.naturalWidth > 0) {
+      const pattern = this.ctx.createPattern(image, "repeat");
+      if (pattern) {
+        this.ctx.fillStyle = pattern;
+        this.ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
+      }
+    } else {
+      this.drawDotsTexture();
     }
   }
 
@@ -997,6 +1400,7 @@ export class World {
       contactPointDuration: this.contactPointDuration,
       theme: this.currentTheme,
       inspectorMode: this.inspectorMode,
+      backgroundTexture: this.backgroundTexture,
     };
 
     try {
@@ -1071,6 +1475,14 @@ export class World {
         if (themeSelect) themeSelect.value = settings.theme;
         this.applyTheme(settings.theme);
       }
+
+      if (settings.backgroundTexture) {
+        this.backgroundTexture = settings.backgroundTexture;
+        const textureSelect = document.getElementById(
+          "background-texture"
+        ) as HTMLSelectElement;
+        if (textureSelect) textureSelect.value = settings.backgroundTexture;
+      }
     } catch (e) {
       console.warn("Failed to load settings from localStorage:", e);
     }
@@ -1090,6 +1502,7 @@ export class World {
     this.currentTheme = "default";
     this.inspectorMode = false;
     this.selectedObject = null;
+    this.backgroundTexture = "none";
 
     const windX = document.getElementById("wind-x") as HTMLInputElement;
     const windY = document.getElementById("wind-y") as HTMLInputElement;
@@ -1117,6 +1530,9 @@ export class World {
     const inspectorPanel = document.getElementById(
       "object-inspector"
     ) as HTMLDivElement;
+    const textureSelect = document.getElementById(
+      "background-texture"
+    ) as HTMLSelectElement;
 
     if (windX) windX.value = "0";
     if (windY) windY.value = "0.05";
@@ -1128,6 +1544,7 @@ export class World {
     if (themeSelect) themeSelect.value = "default";
     if (inspectorCheckbox) inspectorCheckbox.checked = false;
     if (inspectorPanel) inspectorPanel.style.display = "none";
+    if (textureSelect) textureSelect.value = "none";
 
     // apply default theme
     this.applyTheme("default");

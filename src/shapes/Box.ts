@@ -1,7 +1,7 @@
 import { RigidBody } from "../core/RigidBody";
 import { Vector } from "../core/Vector";
 import { drawPolygon, Point } from "../rendering/DrawingUtils";
-import { COLORS } from "../utils/Constants";
+import { getNextObjectColor } from "../utils/Constants";
 
 export class Box extends RigidBody {
   width: number;
@@ -21,7 +21,8 @@ export class Box extends RigidBody {
   }
 
   drawShape(ctx: CanvasRenderingContext2D) {
-    drawPolygon(ctx, this.getPoints(), COLORS.BOX, 3, true);
+    const color = getNextObjectColor(this);
+    drawPolygon(ctx, this.getPoints(), color, 3, true);
   }
 
   getPoints(): Point[] {

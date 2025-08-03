@@ -1,13 +1,52 @@
-QUBED
+# Qubed
 
-physics simulations in a 2d world - edit main.ts to get started
+A 2D physics simulation built with TypeScript. Simulates rigid body dynamics with collision detection and response for boxes, <10-sided polygons, and walls.
 
-Collisions are managed in `src/simulation/World.ts`, with the Collidable interface in `src/core/Collidable.ts`.
+## Architecture
 
-Collision resolution is done by applying impulses to the objects, and also applying a correction to the objects to prevent them from getting stuck in each other.
+The engine is organized into several core modules:
 
-Enable debug mode by calling `setDebugMode(true)` on an instance of RigidBody, which draws velocity, angular velocity, collision points, and bounding boxes.
+- **Core**: Foundation classes for physics objects
 
-## oops explanation
+  - `RigidBody`: Handles mass, velocity, and angular motion
+  - `Vector`: 2D vector math operations
+  - `Object`: Base class for all physics objects
 
-essentially, I messed up all the collision resolution stuff, which took ~2-3 hours - had to reset to previous commit.
+- **Shapes**: Geometric primitives
+
+  - `Box`: Rectangular rigid bodies
+  - `NGon`: N-sided polygon shapes (triangles, pentagons, hexagons, etc.)
+  - `Wall`: Static boundaries
+
+- **Collision**: Physics calculations
+
+  - `CollisionSystem`: Detects intersections between objects
+  - `CollisionInfo`: Stores collision data for resolution
+
+- **Simulation**: Core engine
+
+  - `World`: Manages objects, handles updates, and renders the simulation
+
+- **Rendering**: Visual output
+  - `DrawingUtils`: Canvas drawing utilities
+
+## Setup
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Start development server:
+
+   ```bash
+   npm run dev
+   ```
+
+3. Build for production:
+   ```bash
+   npm run build
+   ```
+
+Edit `src/main.ts` to customize the simulation. Enable debug visualization by calling `setDebugMode(true)` on any RigidBody instance, or toggle all through the UI.
