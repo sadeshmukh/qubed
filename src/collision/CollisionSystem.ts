@@ -92,7 +92,7 @@ export class CollisionSystem {
           edge.end
         );
 
-        if (distance < 1.0) {
+        if (distance < 2.0) {
           const lineVec = edge.end.subtract(edge.start);
           let normal = new Vector(-lineVec.y, lineVec.x).normalize();
           const toCorner = corner.subtract(closestPoint);
@@ -101,8 +101,9 @@ export class CollisionSystem {
             normal = normal.multiply(-1);
           }
 
-          if (distance < minPenetration) {
-            minPenetration = distance;
+          const penetration = 2.0 - distance;
+          if (penetration > 0 && penetration < minPenetration) {
+            minPenetration = penetration;
             contactPoint = closestPoint;
             collisionNormal = normal;
             foundCollision = true;
@@ -126,7 +127,7 @@ export class CollisionSystem {
           edge.end
         );
 
-        if (distance < 1.0) {
+        if (distance < 2.0) {
           const lineVec = edge.end.subtract(edge.start);
           let normal = new Vector(-lineVec.y, lineVec.x).normalize();
           const toCorner = corner.subtract(closestPoint);
@@ -135,8 +136,9 @@ export class CollisionSystem {
             normal = normal.multiply(-1);
           }
 
-          if (distance < minPenetration) {
-            minPenetration = distance;
+          const penetration = 2.0 - distance;
+          if (penetration > 0 && penetration < minPenetration) {
+            minPenetration = penetration;
             contactPoint = closestPoint;
             collisionNormal = normal.multiply(-1);
             foundCollision = true;
@@ -167,20 +169,6 @@ export class CollisionSystem {
     }
 
     if (
-      (bodyA instanceof Box || bodyA instanceof NGon) &&
-      (bodyB instanceof Box || bodyB instanceof NGon)
-    ) {
-      const info = CollisionSystem.checkBoxBoxCollision(bodyB, bodyA);
-      if (info) {
-        return new CollisionInfo(
-          bodyA,
-          bodyB,
-          info.contactPoint,
-          info.normal.multiply(-1),
-          info.penetrationDepth
-        );
-      }
-    } else if (
       (bodyA instanceof Box || bodyA instanceof NGon) &&
       (bodyB instanceof Box || bodyB instanceof NGon)
     ) {
@@ -371,17 +359,36 @@ export class CollisionSystem {
       bodyB.applyImpulseAtPoint(frictionImpulse.multiply(-1), contactPoint);
     }
 
-    if (penetrationDepth > PHYSICS.PENETRATION_SLOP) {
-      const totalInvMass = 1 / bodyA.mass + 1 / bodyB.mass;
-      const correctionAmount =
-        Math.max(penetrationDepth - PHYSICS.PENETRATION_SLOP, 0) *
-        PHYSICS.PERCENT_CORRECTION;
-      const correction = normal.multiply(correctionAmount / totalInvMass);
+    // HACK: just separate :D
+    const totalInvMass = 1 / bodyA.mass + 1 / bodyB.mass;
+    const minSeparation = 5.0;
+    const separationForce = Math.max(penetrationDepth, minSeparation);
+    const correctionAmount = separationForce * 1.2; // yeaaaah 1.2!!
+    const correction = normal.multiply(correctionAmount / totalInvMass);
 
-      bodyA.position = bodyA.position.add(correction.multiply(1 / bodyA.mass));
-      bodyB.position = bodyB.position.subtract(
-        correction.multiply(1 / bodyB.mass)
+    bodyA.position = bodyA.position.add(correction.multiply(1 / bodyA.mass));
+    bodyB.position = bodyB.position.subtract(
+      correction.multiply(1 / bodyB.mass)
+    );
+
+    // HACK: teleport them away if it just is too annoying
+    const centerDistance = bodyA.position.subtract(bodyB.position).magnitude();
+    const minCenterDistance = 25; // minimum distance between centers
+
+    if (centerDistance < minCenterDistance) {
+      const separationDirection = bodyA.position
+        .subtract(bodyB.position)
+        .normalize();
+      const emergencyCorrection = separationDirection.multiply(
+        (minCenterDistance - centerDistance) / 2
       );
+
+      bodyA.position = bodyA.position.add(emergencyCorrection);
+      bodyB.position = bodyB.position.subtract(emergencyCorrection);
+
+      const pushForce = separationDirection.multiply(50);
+      bodyA.velocity = bodyA.velocity.add(pushForce.divide(bodyA.mass));
+      bodyB.velocity = bodyB.velocity.subtract(pushForce.divide(bodyB.mass));
     }
   }
 }

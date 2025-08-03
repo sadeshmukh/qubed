@@ -1,6 +1,6 @@
 import { Object } from "./Object";
 import { Vector } from "./Vector";
-import { PHYSICS } from "../utils/Constants";
+import { PHYSICS, COLORS } from "../utils/Constants";
 import { drawVector, drawLine } from "../rendering/DrawingUtils";
 import { Collidable } from "./Collidable";
 
@@ -204,14 +204,14 @@ export class RigidBody extends Object implements Collidable {
     ctx.translate(this.position.x, this.position.y);
 
     if (this.velocity.magnitude() > 0.01) {
-      drawVector(ctx, this.velocity, "lime", 2, "length");
+      drawVector(ctx, this.velocity, COLORS.VELOCITY_VECTOR, 2, "length");
     }
 
     if (Math.abs(this.angularVelocity) > 0.001) {
       const radius = 15;
       const arcLength = Math.min(Math.abs(this.angularVelocity) * 2, Math.PI);
 
-      ctx.strokeStyle = "yellow";
+      ctx.strokeStyle = COLORS.ANGULAR_VECTOR;
       ctx.lineWidth = 2;
       ctx.beginPath();
       if (this.angularVelocity > 0) {
@@ -242,10 +242,16 @@ export class RigidBody extends Object implements Collidable {
     ctx.restore();
 
     for (const contactPoint of this.contactPoints) {
-      ctx.fillStyle = "red";
+      ctx.fillStyle = COLORS.CONTACT_POINT;
       ctx.beginPath();
-      ctx.arc(contactPoint.x, contactPoint.y, 4, 0, Math.PI * 2);
+      ctx.arc(contactPoint.x, contactPoint.y, 5, 0, Math.PI * 2);
       ctx.fill();
+
+      // glow
+      ctx.shadowColor = COLORS.CONTACT_POINT;
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
     }
   }
 }

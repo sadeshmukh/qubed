@@ -1,6 +1,7 @@
 import { Vector } from "../core/Vector";
 import { drawPolygon, Point } from "../rendering/DrawingUtils";
 import { RigidBody } from "../core/RigidBody";
+import { COLORS } from "../utils/Constants";
 
 export class Wall extends RigidBody {
   start: Vector;
@@ -18,7 +19,7 @@ export class Wall extends RigidBody {
     this.normal = wallVector.perpendicular().normalize();
   }
   drawShape(ctx: CanvasRenderingContext2D) {
-    drawPolygon(ctx, this.getPoints(), "grey", 1, true);
+    drawPolygon(ctx, this.getPoints(), COLORS.BOUNDARY, 2, true);
   }
 
   getNormal(): Vector {

@@ -52,12 +52,515 @@
         border-radius: 4px;
         z-index: 10;
       }
+
+      #top-buttons {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        display: flex;
+        gap: 8px;
+        z-index: 20;
+      }
+
+      #top-buttons button {
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid #444;
+        color: white;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      #top-buttons button:hover {
+        background: rgba(0, 0, 0, 0.9);
+        border-color: #666;
+      }
+
+      #pause-btn.paused {
+        background: rgba(200, 50, 50, 0.8);
+      }
+
+      #control-panel {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        background: rgba(0, 0, 0, 0.9);
+        border: 1px solid #444;
+        color: white;
+        padding: 16px;
+        width: 280px;
+        font-size: 14px;
+        z-index: 15;
+        display: none;
+      }
+
+      #control-panel h3 {
+        margin: 0 0 12px 0;
+        font-size: 16px;
+        color: #fff;
+      }
+
+      .control-group {
+        margin-bottom: 12px;
+      }
+
+      .control-group label {
+        display: block;
+        margin-bottom: 4px;
+        color: #ccc;
+      }
+
+      .control-group input[type="range"] {
+        width: 100%;
+        margin-bottom: 4px;
+      }
+
+      .control-group input[type="number"] {
+        width: 60px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid #666;
+        color: white;
+        padding: 2px 4px;
+      }
+
+      .control-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      button {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid #666;
+        color: white;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      button:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      select {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid #666;
+        color: white;
+        padding: 4px;
+      }
+
+      #object-inspector {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #444;
+      }
+
+      #object-inspector h4 {
+        margin: 0 0 8px 0;
+        font-size: 14px;
+        color: #fff;
+      }
+
+      #inspector-canvas-container {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid #666;
+      }
+
+      #inspector-canvas {
+        display: block;
+      }
+
+      #inspector-info {
+        font-size: 12px;
+        color: #ccc;
+      }
+
+      #inspector-info div {
+        margin-bottom: 2px;
+      }
+
+      .inspector-cursor {
+        cursor: crosshair !important;
+      }
+
+      /* Modal styles */
+      #create-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 100;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      #create-modal-content {
+        background: rgba(0, 0, 0, 0.95);
+        border: 1px solid #444;
+        color: white;
+        padding: 20px;
+        width: 300px;
+        max-height: 80vh;
+        overflow-y: auto;
+        position: relative;
+      }
+
+      #create-modal h3 {
+        margin: 0 0 16px 0;
+        font-size: 18px;
+        color: #fff;
+      }
+
+      #close-modal {
+        position: absolute;
+        top: 8px;
+        right: 12px;
+        background: none;
+        border: none;
+        color: #ccc;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+      }
+
+      #close-modal:hover {
+        color: white;
+      }
+
+      .create-group {
+        margin-bottom: 16px;
+      }
+
+      .create-group label {
+        display: block;
+        margin-bottom: 4px;
+        color: #ccc;
+        font-size: 14px;
+      }
+
+      .create-group input[type="range"] {
+        width: 100%;
+        margin-bottom: 4px;
+      }
+
+      .create-group input[type="number"] {
+        width: 80px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid #666;
+        color: white;
+        padding: 4px;
+      }
+
+      .create-group select {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid #666;
+        color: white;
+        padding: 6px;
+      }
+
+      .create-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .create-row label {
+        margin: 0;
+        min-width: 20px;
+      }
+
+      #create-confirm {
+        background: rgba(50, 150, 50, 0.8);
+        margin-right: 8px;
+      }
+
+      #create-confirm:hover {
+        background: rgba(50, 150, 50, 0.9);
+      }
+
+      #create-cancel {
+        background: rgba(150, 50, 50, 0.8);
+      }
+
+      #create-cancel:hover {
+        background: rgba(150, 50, 50, 0.9);
+      }
+
+      .create-cursor {
+        cursor: crosshair !important;
+      }
+
+      .modal-open #top-buttons {
+        display: none;
+      }
     </style>
   </head>
   <body>
     <div class="container">
       <canvas id="canvas"></canvas>
       <div id="fps">FPS: <span id="fps-value">0</span></div>
+
+      <div id="top-buttons">
+        <button id="control-btn">Controls</button>
+        <button id="pause-btn">Pause</button>
+        <button id="create-btn">Create</button>
+      </div>
+
+      <div id="control-panel">
+        <h3>Physics Controls</h3>
+
+        <div class="control-group">
+          <label>Wind Force</label>
+          <div class="control-row">
+            <label>X:</label>
+            <input
+              type="number"
+              id="wind-x"
+              value="0"
+              step="0.01"
+              min="-1"
+              max="1"
+            />
+            <label>Y:</label>
+            <input
+              type="number"
+              id="wind-y"
+              value="0.05"
+              step="0.01"
+              min="-1"
+              max="1"
+            />
+          </div>
+          <div class="control-row">
+            <input type="checkbox" id="wind-enabled" checked />
+            <label for="wind-enabled">Wind Enabled</label>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Restitution: <span id="restitution-value">0.8</span></label>
+          <input
+            type="range"
+            id="restitution"
+            min="0"
+            max="1"
+            step="0.1"
+            value="0.8"
+          />
+        </div>
+
+        <div class="control-group">
+          <label>Friction: <span id="friction-value">0.3</span></label>
+          <input
+            type="range"
+            id="friction"
+            min="0"
+            max="1"
+            step="0.1"
+            value="0.3"
+          />
+        </div>
+
+        <div class="control-group">
+          <label
+            >Air Resistance: <span id="air-resistance-value">1</span></label
+          >
+          <input
+            type="range"
+            id="air-resistance"
+            min="0.8"
+            max="1"
+            step="0.01"
+            value="1"
+          />
+        </div>
+
+        <div class="control-group">
+          <label>Time Speed: <span id="time-speed-value">1.0x</span></label>
+          <input
+            type="range"
+            id="time-speed"
+            min="0.1"
+            max="3"
+            step="0.1"
+            value="1"
+          />
+        </div>
+
+        <div class="control-group">
+          <label
+            >Contact Point Duration:
+            <span id="contact-duration-value">1.0s</span></label
+          >
+          <input
+            type="range"
+            id="contact-duration"
+            min="0.1"
+            max="5"
+            step="0.1"
+            value="1"
+          />
+        </div>
+
+        <div class="control-group">
+          <label>Theme</label>
+          <select id="theme-select">
+            <option value="default">Default</option>
+            <option value="neon">Neon</option>
+            <option value="sunset">Sunset</option>
+            <option value="minimal">Minimal</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <div class="control-row">
+            <input type="checkbox" id="inspector-mode" />
+            <label for="inspector-mode">Inspector Mode</label>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <button id="reset-objects">Reset Objects</button>
+          <button id="toggle-debug">Toggle Debug</button>
+          <button id="reset-settings">Reset Settings</button>
+        </div>
+
+        <div id="object-inspector" style="display: none">
+          <h4>Object Inspector</h4>
+          <div id="inspector-canvas-container">
+            <canvas id="inspector-canvas" width="120" height="120"></canvas>
+          </div>
+          <div id="inspector-info">
+            <div>Type: <span id="inspector-type">-</span></div>
+            <div>Mass: <span id="inspector-mass">-</span></div>
+            <div>Velocity: <span id="inspector-velocity">-</span></div>
+            <div>Angular Vel: <span id="inspector-angular">-</span></div>
+            <div>Kinetic Energy: <span id="inspector-kinetic">-</span></div>
+            <div>
+              Rotational Kinetic Energy:
+              <span id="inspector-rotational">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Object Creation Modal -->
+      <div id="create-modal" style="display: none">
+        <div id="create-modal-content">
+          <h3>Create New Object</h3>
+          <button id="close-modal">×</button>
+
+          <div class="create-group">
+            <label>Object Type</label>
+            <select id="create-type">
+              <option value="box">Box</option>
+              <option value="triangle">Triangle</option>
+              <option value="pentagon">Pentagon</option>
+              <option value="hexagon">Hexagon</option>
+              <option value="circle">Circle (10-gon)</option>
+            </select>
+          </div>
+
+          <div class="create-group">
+            <label>Mass: <span id="create-mass-value">2.0</span></label>
+            <input
+              type="range"
+              id="create-mass"
+              min="0.5"
+              max="5"
+              step="0.1"
+              value="2"
+            />
+          </div>
+
+          <div class="create-group" id="box-dimensions" style="display: none">
+            <label>Width: <span id="create-width-value">60</span></label>
+            <input
+              type="range"
+              id="create-width"
+              min="20"
+              max="100"
+              step="5"
+              value="60"
+            />
+            <label>Height: <span id="create-height-value">60</span></label>
+            <input
+              type="range"
+              id="create-height"
+              min="20"
+              max="100"
+              step="5"
+              value="60"
+            />
+          </div>
+
+          <div class="create-group" id="ngon-radius" style="display: block">
+            <label>Radius: <span id="create-radius-value">30</span></label>
+            <input
+              type="range"
+              id="create-radius"
+              min="15"
+              max="50"
+              step="2"
+              value="30"
+            />
+          </div>
+
+          <div class="create-group">
+            <label>Initial Velocity</label>
+            <div class="create-row">
+              <label>X:</label>
+              <input
+                type="number"
+                id="create-vel-x"
+                value="0"
+                step="100"
+                min="-2000"
+                max="2000"
+              />
+              <label>Y:</label>
+              <input
+                type="number"
+                id="create-vel-y"
+                value="0"
+                step="100"
+                min="-2000"
+                max="2000"
+              />
+            </div>
+          </div>
+
+          <div class="create-group">
+            <label
+              >Angular Velocity:
+              <span id="create-angular-value">0.0</span></label
+            >
+            <input
+              type="range"
+              id="create-angular"
+              min="-5"
+              max="5"
+              step="0.1"
+              value="0"
+            />
+          </div>
+
+          <div class="create-group">
+            <button id="create-confirm">Click on Canvas to Place</button>
+            <button id="create-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>
     <script type="module" src="./src/main.ts"></script>
   </body>

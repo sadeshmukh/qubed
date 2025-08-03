@@ -19,6 +19,8 @@ let box2: Box;
 let world: World;
 let pentagon: NGon;
 let hexagon: NGon;
+let triangle: NGon;
+let manysided: NGon;
 
 function setupCanvas(callback: () => void) {
   canvas.width = squareSize;
@@ -44,17 +46,21 @@ function setupPhysics() {
   box2 = new Box(2, new Vector(750, 200), 60, 60);
   pentagon = new NGon(1.5, new Vector(300, 500), 40, 5);
   hexagon = new NGon(1.8, new Vector(600, 400), 35, 6);
+  triangle = new NGon(1.5, new Vector(500, 500), 30, 3);
+  manysided = new NGon(1.5, new Vector(700, 500), 30, 10);
 
-  box1.setDebugMode(true);
-  box2.setDebugMode(true);
-  pentagon.setDebugMode(true);
-  hexagon.setDebugMode(true);
+  // box1.setDebugMode(true);
+  // box2.setDebugMode(true);
+  // pentagon.setDebugMode(true);
+  // hexagon.setDebugMode(true);
+  // triangle.setDebugMode(true);
 
   world.addObject(box1);
   world.addObject(box2);
   world.addObject(pentagon);
   world.addObject(hexagon);
-
+  world.addObject(manysided);
+  world.addObject(triangle);
   box1.applyImpulse(new Vector(-500, 0));
   box2.rotate(Math.PI / 8);
   box1.applyRotationImpulse(Math.PI / 64);
@@ -91,6 +97,7 @@ function setupPhysics() {
   world.addWall(topWall);
   world.addWall(bottomWall);
 
+  world.setupControlPanel();
   isSetupComplete = true;
 }
 
