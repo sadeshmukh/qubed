@@ -4,6 +4,7 @@ import { drawPolygon, Point } from "../rendering/DrawingUtils";
 import { getNextObjectColor } from "../utils/Constants";
 
 export class NGon extends RigidBody {
+  static readonly TYPE = "NGon";
   radius: number;
   sides: number;
 
@@ -22,6 +23,10 @@ export class NGon extends RigidBody {
     super(mass, momentOfInertia, position, rotation);
     this.radius = radius;
     this.sides = sides;
+  }
+
+  getType(): string {
+    return NGon.TYPE;
   }
 
   drawShape(ctx: CanvasRenderingContext2D) {

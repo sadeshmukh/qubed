@@ -4,6 +4,7 @@ import { drawPolygon, Point } from "../rendering/DrawingUtils";
 import { getNextObjectColor } from "../utils/Constants";
 
 export class Box extends RigidBody {
+  static readonly TYPE = "Box";
   width: number;
   height: number;
 
@@ -18,6 +19,10 @@ export class Box extends RigidBody {
     super(mass, momentOfInertia, position, rotation);
     this.width = width;
     this.height = height;
+  }
+
+  getType(): string {
+    return Box.TYPE;
   }
 
   drawShape(ctx: CanvasRenderingContext2D) {

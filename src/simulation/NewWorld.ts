@@ -439,10 +439,10 @@ export class World {
   }
 
   private getObjectSize(object: RigidBody): number {
-    if (object.constructor.name === "Box") {
+    if (object.getType() === "Box") {
       const box = object as any;
       return Math.max(box.width, box.height);
-    } else if (object.constructor.name === "NGon") {
+    } else if (object.getType() === "NGon") {
       const ngon = object as any;
       return ngon.radius * 2;
     }
@@ -548,8 +548,9 @@ export class World {
     this.objectFactory.setupCreatePanel();
     // Set up object factory callbacks
     this.objectFactory.setObjectCreatedCallback((obj) => this.addObject(obj));
-    this.objectFactory.setGetExistingObjectsCallback(() => 
-      this.objects.filter(obj => obj instanceof RigidBody) as RigidBody[]
+    this.objectFactory.setGetExistingObjectsCallback(
+      () =>
+        this.objects.filter((obj) => obj instanceof RigidBody) as RigidBody[]
     );
     this.themeManager.setupThemeControls();
     this.themeManager.setupBackgroundTexture();
@@ -605,8 +606,14 @@ export class World {
 
       // Handle create mode first
       if (this.objectFactory.getCreateMode()) {
-        const rigidObjects = this.objects.filter(obj => obj instanceof RigidBody) as RigidBody[];
-        const newObject = this.objectFactory.handleCreateClick(event, (pos) => this.screenToWorld(pos), rigidObjects);
+        const rigidObjects = this.objects.filter(
+          (obj) => obj instanceof RigidBody
+        ) as RigidBody[];
+        const newObject = this.objectFactory.handleCreateClick(
+          event,
+          (pos) => this.screenToWorld(pos),
+          rigidObjects
+        );
         if (newObject) {
           this.addObject(newObject);
         }
@@ -614,9 +621,14 @@ export class World {
       }
 
       // Find clicked object for inspector/delete modes
-      const rigidObjects = this.objects.filter(obj => obj instanceof RigidBody) as RigidBody[];
-      const clickedObject = this.inputHandler.findObjectAtPosition(worldPos, rigidObjects);
-      
+      const rigidObjects = this.objects.filter(
+        (obj) => obj instanceof RigidBody
+      ) as RigidBody[];
+      const clickedObject = this.inputHandler.findObjectAtPosition(
+        worldPos,
+        rigidObjects
+      );
+
       if (clickedObject) {
         if (this.inspector.getInspectorMode()) {
           this.inspector.setSelectedObject(clickedObject);
@@ -634,7 +646,7 @@ export class World {
       const screenX = event.clientX - rect.left;
       const screenY = event.clientY - rect.top;
       const worldPos = this.screenToWorld(new Vector(screenX, screenY));
-      
+
       // Update time and let input handler process the mouse move
       this.inputHandler.updateTime(this.currentTime);
       this.inputHandler.handleMouseMove(worldPos);

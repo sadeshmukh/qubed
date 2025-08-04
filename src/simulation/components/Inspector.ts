@@ -59,7 +59,7 @@ export class Inspector {
     ) as HTMLSpanElement;
 
     if (typeEl && massEl && velocityEl && angularEl) {
-      typeEl.textContent = this.selectedObject.constructor.name;
+      typeEl.textContent = this.selectedObject.getType();
       massEl.textContent = this.selectedObject.mass.toFixed(1);
       velocityEl.textContent = this.selectedObject.velocity
         .magnitude()
@@ -101,7 +101,7 @@ export class Inspector {
     ctx.save(); // save state, doesn't affect velocity arrow
     ctx.rotate(this.selectedObject.rotation);
 
-    if (this.selectedObject.constructor.name === "Box") {
+    if (this.selectedObject.getType() === "Box") {
       const box = this.selectedObject as any;
       const width = box.width * 0.5;
       const height = box.height * 0.5;
@@ -111,7 +111,7 @@ export class Inspector {
       ctx.lineWidth = 2;
       ctx.fillRect(-width / 2, -height / 2, width, height);
       ctx.strokeRect(-width / 2, -height / 2, width, height);
-    } else if (this.selectedObject.constructor.name === "NGon") {
+    } else if (this.selectedObject.getType() === "NGon") {
       const ngon = this.selectedObject as any;
       const radius = ngon.radius * 0.6;
       const sides = ngon.sides;
