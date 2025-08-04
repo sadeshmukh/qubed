@@ -122,9 +122,24 @@
         display: none;
       }
 
+      #audio-panel {
+        position: absolute;
+        top: 60px;
+        left: 16px;
+        background: rgba(0, 0, 0, 0.9);
+        border: 1px solid #444;
+        color: white;
+        padding: 16px;
+        width: 280px;
+        font-size: 14px;
+        z-index: 15;
+        display: none;
+      }
+
       #control-panel h3,
       #create-panel h3,
-      #cursor-panel h3 {
+      #cursor-panel h3,
+      #audio-panel h3 {
         margin: 0 0 12px 0;
         font-size: 16px;
         color: #fff;
@@ -251,6 +266,7 @@
         <button id="pause-btn">Pause</button>
         <button id="create-btn">Create</button>
         <button id="cursor-btn">Cursor</button>
+        <button id="audio-btn">Audio</button>
       </div>
 
       <div id="control-panel">
@@ -393,6 +409,15 @@
           <button id="reset-objects">Reset Objects</button>
           <button id="toggle-debug">Toggle Debug</button>
           <button id="reset-settings">Reset Settings</button>
+        </div>
+
+        <div class="control-group">
+          <label>Quick Presets</label>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="bouncy-mode" style="font-size: 11px;">Bouncy Mode</button>
+            <button id="realistic-mode" style="font-size: 11px;">Realistic</button>
+          </div>
+          <small style="color: #aaa;">Quick physics presets</small>
         </div>
 
         <div id="object-inspector" style="display: none">
@@ -557,7 +582,114 @@
           />
         </div>
       </div>
+
+      <div id="audio-panel">
+        <h3>Audio Settings</h3>
+
+        <div class="control-group">
+          <div class="control-row">
+            <input type="checkbox" id="audio-enabled" checked />
+            <label for="audio-enabled">Enable Audio</label>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Master Volume: <span id="master-volume-value">70%</span></label>
+          <input
+            type="range"
+            id="master-volume"
+            min="0"
+            max="100"
+            step="5"
+            value="70"
+          />
+        </div>
+
+        <div class="control-group">
+          <div class="control-row">
+            <input type="checkbox" id="collision-sounds" checked />
+            <label for="collision-sounds">Collision Sounds</label>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Collision Volume: <span id="collision-volume-value">80%</span></label>
+          <input
+            type="range"
+            id="collision-volume"
+            min="0"
+            max="100"
+            step="5"
+            value="80"
+          />
+        </div>
+
+        <div class="control-group">
+          <div class="control-row">
+            <input type="checkbox" id="wind-sounds" checked />
+            <label for="wind-sounds">Wind Sounds</label>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Wind Volume: <span id="wind-volume-value">60%</span></label>
+          <input
+            type="range"
+            id="wind-volume"
+            min="0"
+            max="100"
+            step="5"
+            value="60"
+          />
+        </div>
+
+        <div class="control-group">
+          <label>Wind Threshold: <span id="wind-threshold-value">200</span></label>
+          <input
+            type="range"
+            id="wind-threshold"
+            min="50"
+            max="500"
+            step="25"
+            value="200"
+          />
+          <small style="color: #aaa;">Minimum velocity for wind sounds</small>
+        </div>
+
+        <div class="control-group">
+          <label>Audio Tests</label>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="test-collision" style="font-size: 11px;">Test Collision</button>
+            <button id="test-wall" style="font-size: 11px;">Test Wall Hit</button>
+            <button id="test-wind" style="font-size: 11px;">Test Wind</button>
+          </div>
+          <small style="color: #aaa;">Click to test audio output</small>
+        </div>
+      </div>
     </div>
+
+    <div id="calmness-indicator" style="
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 12px 20px;
+      font-size: 14px;
+      text-align: center;
+      border-top: 1px solid #333;
+      z-index: 30;
+      transition: all 0.3s ease;
+    ">
+      <div id="calmness-text">System at rest</div>
+      <div id="calmness-details" style="font-size: 11px; color: #aaa; margin-top: 4px;">
+        Momentum: <span id="momentum-display">0.0</span> | 
+        Energy: <span id="energy-display">Low</span> | 
+        Activity: <span id="activity-display">Calm</span>
+      </div>
+    </div>
+
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

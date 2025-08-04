@@ -1,7 +1,7 @@
 import { Vector } from "../core/Vector";
 import { Theme, getTheme } from "./themes";
 
-export const PHYSICS = {
+export let PHYSICS = {
   FORCE_SCALE: 1000,
   TORQUE_SCALE: 1000,
   RESTITUTION: 1,
@@ -15,7 +15,11 @@ export const PHYSICS = {
   MAX_ANGULAR_VELOCITY: 8,
   MIN_TIMESTEP: 1 / 240,
   MAX_TIMESTEP: 1 / 60,
-} as const;
+};
+
+export function updatePhysicsSettings(settings: Partial<typeof PHYSICS>): void {
+  PHYSICS = { ...PHYSICS, ...settings };
+}
 
 export let WIND = {
   FORCE: new Vector(0, 0.05),
@@ -91,4 +95,22 @@ export function applyColorTheme(themeName: string) {
 export const CANVAS = {
   DEFAULT_WIDTH: 800,
   DEFAULT_HEIGHT: 600,
+} as const;
+
+export const CALMNESS_MESSAGES = {
+  Low: {
+    Stable: "And all was still - Me",
+    Dynamic: "I see traces of motion...",
+    Turbulent: "Just you wait a moment",
+  },
+  Moderate: {
+    Stable: "A little motion, not too much",
+    Dynamic: "Right in the middle",
+    Turbulent: "The chaos takes a breath",
+  },
+  High: {
+    Stable: "Find stability in the chaos",
+    Dynamic: "just a step away",
+    Turbulent: "WHOAH",
+  },
 } as const;

@@ -10,27 +10,44 @@ import {
   WIND,
   COLORS,
   CURRENT_THEME,
+  CALMNESS_MESSAGES,
   setWindForce,
   applyColorTheme,
   getNextObjectColor,
   resetObjectColors,
+  updatePhysicsSettings,
 } from "../utils/Constants";
 import { getTextureColor, TEXTURE_OPTIONS, THEMES } from "../utils/themes";
 import { Box } from "../shapes/Box";
 import { NGon } from "../shapes/NGon";
+import { AudioSystem } from "../audio/AudioSystem";
 
 interface FadingContactPoint {
   position: Vector;
   timeCreated: number;
 }
 
+interface CollisionRecord {
+  timestamp: number;
+  count: number;
+}
+
+interface ObjectPair {
+  obj1Id: number;
+  obj2Id: number;
+  noCollisionUntil: number;
+  lastSeparationTime: number;
+}
+
 export class World {
   objects: Object[] = [];
   walls: Wall[] = [];
   ctx: CanvasRenderingContext2D | null = null;
+  private audioSystem: AudioSystem;
   private contactPoints: Vector[] = [];
   private fadingContactPoints: FadingContactPoint[] = [];
   private collisions: CollisionInfo[] = [];
+  private processedCollisions: Set<string> = new Set();
   private currentTime: number = 0;
   private timeSpeed: number = 1.0;
   private inspectorMode: boolean = false;
@@ -48,11 +65,24 @@ export class World {
   private deleteMode: boolean = false;
   private totalMomentum: Vector = new Vector(0, 0);
   private totalAngularMomentum: number = 0;
+  private momentumHistory: number[] = [];
+  private lastTotalKineticEnergy: number = 0;
+  private recentCollisions: number = 0;
   private frameSkipCounter: number = 0;
   private lastCollisionCheck: number = 0;
+  private collisionHistory: Map<string, CollisionRecord> = new Map();
+  private objectPairStates: Map<string, ObjectPair> = new Map();
+  private readonly COLLISION_THRESHOLD = 5;
+  private readonly TIME_WINDOW = 2000;
+  private readonly NO_COLLISION_DURATION = 1000;
 
   worldWidth: number = WORLD.COORDINATE_SYSTEM;
   worldHeight: number = WORLD.COORDINATE_SYSTEM;
+
+  constructor() {
+    this.audioSystem = new AudioSystem();
+    this.audioSystem.initialize();
+  }
   private screenWidth: number = WORLD.COORDINATE_SYSTEM;
   private screenHeight: number = WORLD.COORDINATE_SYSTEM;
 
@@ -106,7 +136,11 @@ export class World {
 
     if (this.frameSkipCounter % 5 === 0) {
       this.updateMomentumDisplay();
+      this.updateCalmnessIndicator();
     }
+
+    // Update audio based on object velocities
+    this.updateAudio();
 
     this.render();
 
@@ -150,6 +184,8 @@ export class World {
   checkCollisions() {
     this.collisions = [];
     this.contactPoints = [];
+    this.processedCollisions.clear();
+    this.recentCollisions = 0;
 
     for (const object of this.objects) {
       if (object instanceof RigidBody) {
@@ -172,6 +208,23 @@ export class World {
             this.contactPoints.push(info.contactPoint);
             this.addFadingContactPoint(info.contactPoint);
             object.setContactPoints([info.contactPoint]);
+
+            // deduped wall collision sound
+            const objectId = this.objects.indexOf(object);
+            const collisionKey = `wall-${objectId}`;
+            if (!this.processedCollisions.has(collisionKey)) {
+              this.processedCollisions.add(collisionKey);
+              this.recentCollisions++;
+              const velocity = object.velocity.magnitude();
+              const objectSize = this.getObjectSize(object);
+              const objectMass = this.getObjectMass(object);
+              this.audioSystem.playCollisionSound(
+                velocity,
+                true,
+                objectSize,
+                objectMass
+              );
+            }
           }
         }
       }
@@ -196,13 +249,52 @@ export class World {
         const obj2 = this.objects[j];
 
         if (obj1 instanceof RigidBody && obj2 instanceof RigidBody) {
+          const obj1Id = this.objects.indexOf(obj1);
+          const obj2Id = this.objects.indexOf(obj2);
+          const pairKey = `${Math.min(obj1Id, obj2Id)}-${Math.max(
+            obj1Id,
+            obj2Id
+          )}`;
+
+          // skip collision if in no-collision state
+          // secret sauce behind the cheat of avoiding bad collisions
+          if (this.shouldSkipCollision(pairKey)) {
+            this.applySeparationForce(obj1, obj2);
+            continue;
+          }
+
           const info = CollisionSystem.checkCollision(obj1, obj2);
           if (info) {
+            this.trackCollision(pairKey);
+
             this.collisions.push(info);
             this.contactPoints.push(info.contactPoint);
             this.addFadingContactPoint(info.contactPoint);
             obj1.setContactPoints([info.contactPoint]);
             obj2.setContactPoints([info.contactPoint]);
+
+            // deduped object collision sound
+            const collisionKey = `obj-${Math.min(obj1Id, obj2Id)}-${Math.max(
+              obj1Id,
+              obj2Id
+            )}`;
+            if (!this.processedCollisions.has(collisionKey)) {
+              this.processedCollisions.add(collisionKey);
+              this.recentCollisions++;
+              const relativeVelocity = obj1.velocity
+                .subtract(obj2.velocity)
+                .magnitude();
+              const averageSize =
+                (this.getObjectSize(obj1) + this.getObjectSize(obj2)) / 2;
+              const averageMass =
+                (this.getObjectMass(obj1) + this.getObjectMass(obj2)) / 2;
+              this.audioSystem.playCollisionSound(
+                relativeVelocity,
+                false,
+                averageSize,
+                averageMass
+              );
+            }
           }
         }
       }
@@ -210,8 +302,7 @@ export class World {
   }
 
   private checkCollisionsOptimized() {
-    // partition world into cell?
-    // no clue how well this works but it has worked in the past for me, so we'll assume it works
+    // partition world into cell
     const cellSize = 150;
     const cells: Map<string, RigidBody[]> = new Map();
 
@@ -235,13 +326,51 @@ export class World {
         for (let j = i + 1; j < cellObjects.length; j++) {
           const obj1 = cellObjects[i];
           const obj2 = cellObjects[j];
+
+          const obj1Id = this.objects.indexOf(obj1);
+          const obj2Id = this.objects.indexOf(obj2);
+          const pairKey = `${Math.min(obj1Id, obj2Id)}-${Math.max(
+            obj1Id,
+            obj2Id
+          )}`;
+
+          // skip collision if in no-collision state
+          if (this.shouldSkipCollision(pairKey)) {
+            this.applySeparationForce(obj1, obj2);
+            continue;
+          }
+
           const info = CollisionSystem.checkCollision(obj1, obj2);
           if (info) {
+            this.trackCollision(pairKey);
+
             this.collisions.push(info);
             this.contactPoints.push(info.contactPoint);
             this.addFadingContactPoint(info.contactPoint);
             obj1.setContactPoints([info.contactPoint]);
             obj2.setContactPoints([info.contactPoint]);
+
+            const collisionKey = `obj-${Math.min(obj1Id, obj2Id)}-${Math.max(
+              obj1Id,
+              obj2Id
+            )}`;
+            if (!this.processedCollisions.has(collisionKey)) {
+              this.processedCollisions.add(collisionKey);
+              this.recentCollisions++;
+              const relativeVelocity = obj1.velocity
+                .subtract(obj2.velocity)
+                .magnitude();
+              const averageSize =
+                (this.getObjectSize(obj1) + this.getObjectSize(obj2)) / 2;
+              const averageMass =
+                (this.getObjectMass(obj1) + this.getObjectMass(obj2)) / 2;
+              this.audioSystem.playCollisionSound(
+                relativeVelocity,
+                false,
+                averageSize,
+                averageMass
+              );
+            }
           }
         }
       }
@@ -375,6 +504,168 @@ export class World {
     this.ctx.restore();
   }
 
+  private updateAudio(): void {
+    if (!this.audioSystem) return;
+
+    // max  velocity for wind
+    let maxVelocity = 0;
+    for (const object of this.objects) {
+      if (object instanceof RigidBody) {
+        const velocity = object.velocity.magnitude();
+        if (velocity > maxVelocity) {
+          maxVelocity = velocity;
+        }
+      }
+    }
+
+    // don't block the render loop
+    this.audioSystem.updateWindSound(maxVelocity);
+  }
+
+  private getObjectSize(object: RigidBody): number {
+    if (object instanceof Box) {
+      return Math.max(object.width, object.height);
+    } else if (object instanceof NGon) {
+      return object.radius * 2;
+    }
+    return 30;
+  }
+
+  private getObjectMass(object: RigidBody): number {
+    return object.mass;
+  }
+
+  private setupAudioPanel(): void {
+    const audioBtn = document.getElementById("audio-btn") as HTMLButtonElement;
+    const audioPanel = document.getElementById("audio-panel") as HTMLDivElement;
+
+    if (audioBtn && audioPanel) {
+      audioBtn.addEventListener("click", () => {
+        this.closeAllPanelsExcept("audio-panel");
+        audioPanel.style.display =
+          audioPanel.style.display === "none" ? "block" : "none";
+      });
+    }
+
+    const audioEnabled = document.getElementById(
+      "audio-enabled"
+    ) as HTMLInputElement;
+    if (audioEnabled) {
+      audioEnabled.addEventListener("change", () => {
+        this.audioSystem.updateSettings({ enabled: audioEnabled.checked });
+        this.saveSettings();
+      });
+    }
+
+    const masterVolume = document.getElementById(
+      "master-volume"
+    ) as HTMLInputElement;
+    const masterVolumeValue = document.getElementById(
+      "master-volume-value"
+    ) as HTMLSpanElement;
+    if (masterVolume && masterVolumeValue) {
+      masterVolume.addEventListener("input", () => {
+        const volume = parseInt(masterVolume.value) / 100;
+        this.audioSystem.updateSettings({ volume });
+        masterVolumeValue.textContent = `${masterVolume.value}%`;
+        this.saveSettings();
+      });
+    }
+
+    const collisionSounds = document.getElementById(
+      "collision-sounds"
+    ) as HTMLInputElement;
+    if (collisionSounds) {
+      collisionSounds.addEventListener("change", () => {
+        this.audioSystem.updateSettings({
+          collisionSoundsEnabled: collisionSounds.checked,
+        });
+        this.saveSettings();
+      });
+    }
+
+    const collisionVolume = document.getElementById(
+      "collision-volume"
+    ) as HTMLInputElement;
+    const collisionVolumeValue = document.getElementById(
+      "collision-volume-value"
+    ) as HTMLSpanElement;
+    if (collisionVolume && collisionVolumeValue) {
+      collisionVolume.addEventListener("input", () => {
+        const volume = parseInt(collisionVolume.value) / 100;
+        this.audioSystem.updateSettings({ collisionVolume: volume });
+        collisionVolumeValue.textContent = `${collisionVolume.value}%`;
+        this.saveSettings();
+      });
+    }
+
+    const windSounds = document.getElementById(
+      "wind-sounds"
+    ) as HTMLInputElement;
+    if (windSounds) {
+      windSounds.addEventListener("change", () => {
+        this.audioSystem.updateSettings({
+          windSoundsEnabled: windSounds.checked,
+        });
+        this.saveSettings();
+      });
+    }
+
+    const windVolume = document.getElementById(
+      "wind-volume"
+    ) as HTMLInputElement;
+    const windVolumeValue = document.getElementById(
+      "wind-volume-value"
+    ) as HTMLSpanElement;
+    if (windVolume && windVolumeValue) {
+      windVolume.addEventListener("input", () => {
+        const volume = parseInt(windVolume.value) / 100;
+        this.audioSystem.updateSettings({ windVolume: volume });
+        windVolumeValue.textContent = `${windVolume.value}%`;
+        this.saveSettings();
+      });
+    }
+
+    const windThreshold = document.getElementById(
+      "wind-threshold"
+    ) as HTMLInputElement;
+    const windThresholdValue = document.getElementById(
+      "wind-threshold-value"
+    ) as HTMLSpanElement;
+    if (windThreshold && windThresholdValue) {
+      windThreshold.addEventListener("input", () => {
+        const threshold = parseInt(windThreshold.value);
+        this.audioSystem.updateSettings({ windThreshold: threshold });
+        windThresholdValue.textContent = windThreshold.value;
+        this.saveSettings();
+      });
+    }
+
+    const testCollision = document.getElementById(
+      "test-collision"
+    ) as HTMLButtonElement;
+    const testWall = document.getElementById("test-wall") as HTMLButtonElement;
+    const testWind = document.getElementById("test-wind") as HTMLButtonElement;
+
+    if (testCollision) {
+      testCollision.addEventListener("click", () => {
+        this.audioSystem.testCollisionSound();
+      });
+    }
+
+    if (testWall) {
+      testWall.addEventListener("click", () => {
+        this.audioSystem.testWallSound();
+      });
+    }
+
+    if (testWind) {
+      testWind.addEventListener("click", () => {
+        this.audioSystem.testWindSound();
+      });
+    }
+  }
+
   public setupControlPanel() {
     const controlBtn = document.getElementById(
       "control-btn"
@@ -424,6 +715,7 @@ export class World {
     this.setupPauseButton();
     this.setupCreatePanel();
     this.setupCursorPanel();
+    this.setupAudioPanel();
     this.setupActionButtons();
   }
 
@@ -451,7 +743,8 @@ export class World {
       restitutionSlider.addEventListener("input", () => {
         const value = parseFloat(restitutionSlider.value);
         restitutionValue.textContent = value.toString();
-        // modify from Constants.ts
+        updatePhysicsSettings({ RESTITUTION: value });
+        this.saveSettings();
       });
     }
 
@@ -459,6 +752,8 @@ export class World {
       frictionSlider.addEventListener("input", () => {
         const value = parseFloat(frictionSlider.value);
         frictionValue.textContent = value.toString();
+        updatePhysicsSettings({ FRICTION: value });
+        this.saveSettings();
       });
     }
 
@@ -466,6 +761,8 @@ export class World {
       airResistanceSlider.addEventListener("input", () => {
         const value = parseFloat(airResistanceSlider.value);
         airResistanceValue.textContent = value.toString();
+        updatePhysicsSettings({ AIR_RESISTANCE: value });
+        this.saveSettings();
       });
     }
   }
@@ -479,6 +776,12 @@ export class World {
     ) as HTMLButtonElement;
     const resetSettingsBtn = document.getElementById(
       "reset-settings"
+    ) as HTMLButtonElement;
+    const bouncyBtn = document.getElementById(
+      "bouncy-mode"
+    ) as HTMLButtonElement;
+    const realisticBtn = document.getElementById(
+      "realistic-mode"
     ) as HTMLButtonElement;
 
     if (resetBtn) {
@@ -496,6 +799,18 @@ export class World {
     if (resetSettingsBtn) {
       resetSettingsBtn.addEventListener("click", () => {
         this.resetSettings();
+      });
+    }
+
+    if (bouncyBtn) {
+      bouncyBtn.addEventListener("click", () => {
+        this.setBouncyMode();
+      });
+    }
+
+    if (realisticBtn) {
+      realisticBtn.addEventListener("click", () => {
+        this.setRealisticMode();
       });
     }
   }
@@ -531,6 +846,66 @@ export class World {
       if (object instanceof RigidBody) {
         object.setDebugMode(!object.debugMode);
       }
+    }
+  }
+
+  private setBouncyMode() {
+    updatePhysicsSettings({
+      RESTITUTION: 1.0,
+      FRICTION: 0.0,
+      AIR_RESISTANCE: 1.0,
+    });
+
+    this.updatePhysicsUI();
+    this.saveSettings();
+  }
+
+  private setRealisticMode() {
+    updatePhysicsSettings({
+      RESTITUTION: 0.8,
+      FRICTION: 0.3,
+      AIR_RESISTANCE: 0.99,
+    });
+
+    this.updatePhysicsUI();
+    this.saveSettings();
+  }
+
+  private updatePhysicsUI() {
+    // update the UI sliders to reflect current physics values
+    // this is why react exists
+    const restitutionSlider = document.getElementById(
+      "restitution"
+    ) as HTMLInputElement;
+    const restitutionValue = document.getElementById(
+      "restitution-value"
+    ) as HTMLSpanElement;
+    const frictionSlider = document.getElementById(
+      "friction"
+    ) as HTMLInputElement;
+    const frictionValue = document.getElementById(
+      "friction-value"
+    ) as HTMLSpanElement;
+    const airResistanceSlider = document.getElementById(
+      "air-resistance"
+    ) as HTMLInputElement;
+    const airResistanceValue = document.getElementById(
+      "air-resistance-value"
+    ) as HTMLSpanElement;
+
+    if (restitutionSlider && restitutionValue) {
+      restitutionSlider.value = PHYSICS.RESTITUTION.toString();
+      restitutionValue.textContent = PHYSICS.RESTITUTION.toString();
+    }
+
+    if (frictionSlider && frictionValue) {
+      frictionSlider.value = PHYSICS.FRICTION.toString();
+      frictionValue.textContent = PHYSICS.FRICTION.toString();
+    }
+
+    if (airResistanceSlider && airResistanceValue) {
+      airResistanceSlider.value = PHYSICS.AIR_RESISTANCE.toString();
+      airResistanceValue.textContent = PHYSICS.AIR_RESISTANCE.toString();
     }
   }
 
@@ -1025,6 +1400,7 @@ export class World {
     const cursorPanel = document.getElementById(
       "cursor-panel"
     ) as HTMLDivElement;
+    const audioPanel = document.getElementById("audio-panel") as HTMLDivElement;
 
     if (controlPanel && exceptId !== "control-panel")
       controlPanel.style.display = "none";
@@ -1032,6 +1408,8 @@ export class World {
       createPanel.style.display = "none";
     if (cursorPanel && exceptId !== "cursor-panel")
       cursorPanel.style.display = "none";
+    if (audioPanel && exceptId !== "audio-panel")
+      audioPanel.style.display = "none";
   }
 
   private handleCreateClick(event: MouseEvent) {
@@ -1192,6 +1570,7 @@ export class World {
   private updateMomentumDisplay() {
     this.totalMomentum = new Vector(0, 0);
     this.totalAngularMomentum = 0;
+    let totalKineticEnergy = 0;
 
     for (const object of this.objects) {
       if (object instanceof RigidBody) {
@@ -1202,7 +1581,21 @@ export class World {
         // Iw
         this.totalAngularMomentum +=
           object.momentOfInertia * object.angularVelocity;
+
+        const linearKE = 0.5 * object.mass * object.velocity.magnitude() ** 2;
+        const rotationalKE =
+          0.5 * object.momentOfInertia * object.angularVelocity ** 2;
+        totalKineticEnergy += linearKE + rotationalKE;
       }
+    }
+
+    // for system status indicator
+    this.lastTotalKineticEnergy = totalKineticEnergy;
+
+    const momentumMagnitude = this.totalMomentum.magnitude();
+    this.momentumHistory.push(momentumMagnitude);
+    if (this.momentumHistory.length > 20) {
+      this.momentumHistory.shift();
     }
 
     const linearMomentumEl = document.getElementById("linear-momentum");
@@ -1220,6 +1613,189 @@ export class World {
     if (objectCountEl) {
       objectCountEl.textContent = this.objects.length.toString();
     }
+  }
+
+  private trackCollision(pairKey: string): void {
+    const now = performance.now();
+    const record = this.collisionHistory.get(pairKey) || {
+      timestamp: now,
+      count: 0,
+    };
+
+    if (now - record.timestamp > this.TIME_WINDOW) {
+      record.timestamp = now;
+      record.count = 1;
+    } else {
+      record.count++;
+    }
+
+    this.collisionHistory.set(pairKey, record);
+
+    // check if threshold is exceeded
+    if (record.count >= this.COLLISION_THRESHOLD) {
+      this.activateNoCollisionState(pairKey, now);
+    }
+  }
+
+  private activateNoCollisionState(pairKey: string, currentTime: number): void {
+    // why this hack?
+    // no matter what I do, they seem to want to get entangled anyways
+    // so just straight up force them apart and hope it works (doesn't look too weird)
+    const [obj1Id, obj2Id] = pairKey.split("-").map(Number);
+    const obj1 = this.objects[obj1Id] as RigidBody;
+    const obj2 = this.objects[obj2Id] as RigidBody;
+
+    if (!obj1 || !obj2) return;
+
+    // direction (norm)
+    const direction = obj2.position.subtract(obj1.position).normalize();
+
+    // immediate correction
+    const relativeVelocity = obj1.velocity.subtract(obj2.velocity);
+    const velocityAlongNormal = relativeVelocity.dot(direction);
+
+    if (velocityAlongNormal < 0) {
+      const separationSpeed = 100;
+      const impulse = direction.multiply(separationSpeed);
+
+      const totalMass = obj1.mass + obj2.mass;
+      const impulse1 = impulse.multiply(-obj2.mass / totalMass);
+      const impulse2 = impulse.multiply(obj1.mass / totalMass);
+
+      obj1.velocity = obj1.velocity.add(impulse1);
+      obj2.velocity = obj2.velocity.add(impulse2);
+    }
+
+    this.objectPairStates.set(pairKey, {
+      obj1Id,
+      obj2Id,
+      noCollisionUntil: currentTime + this.NO_COLLISION_DURATION,
+      lastSeparationTime: currentTime,
+    });
+
+    this.collisionHistory.delete(pairKey);
+  }
+
+  private shouldSkipCollision(pairKey: string): boolean {
+    const pairState = this.objectPairStates.get(pairKey);
+    if (!pairState) return false;
+
+    const now = performance.now();
+
+    if (now > pairState.noCollisionUntil) {
+      this.objectPairStates.delete(pairKey);
+      return false;
+    }
+
+    return true;
+  }
+
+  private applySeparationForce(obj1: RigidBody, obj2: RigidBody): void {
+    const direction = obj2.position.subtract(obj1.position);
+    const distance = direction.magnitude();
+
+    if (distance === 0) return;
+
+    const normalizedDirection = direction.normalize();
+    const minDistance = 80;
+
+    if (distance < minDistance) {
+      const separationStrength = (minDistance - distance) * 0.5;
+      const force = normalizedDirection.multiply(separationStrength);
+
+      obj1.applyForce(force.multiply(-1));
+      obj2.applyForce(force);
+    }
+  }
+
+  private updateCalmnessIndicator() {
+    const calmnessText = document.getElementById("calmness-text");
+    const momentumDisplay = document.getElementById("momentum-display");
+    const energyDisplay = document.getElementById("energy-display");
+    const activityDisplay = document.getElementById("activity-display");
+    const indicator = document.getElementById("calmness-indicator");
+
+    if (
+      !calmnessText ||
+      !momentumDisplay ||
+      !energyDisplay ||
+      !activityDisplay ||
+      !indicator
+    ) {
+      return;
+    }
+
+    const momentum = this.totalMomentum.magnitude();
+    const energy = this.lastTotalKineticEnergy;
+
+    let momentumChange = 0;
+    if (this.momentumHistory.length > 1) {
+      const recent = this.momentumHistory.slice(-5);
+      const older = this.momentumHistory.slice(-10, -5);
+      const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+      const olderAvg =
+        older.length > 0
+          ? older.reduce((a, b) => a + b, 0) / older.length
+          : recentAvg;
+      momentumChange = Math.abs(recentAvg - olderAvg);
+    }
+
+    let calmnessLevel: string;
+    let bgColor: string;
+    let textColor: string;
+
+    if (energy < 1000 && momentum < 50 && this.recentCollisions === 0) {
+      calmnessLevel = "Peaceful";
+      bgColor = "rgba(0, 50, 0, 0.8)"; // Dark green
+      textColor = "#90EE90";
+    } else if (energy < 5000 && momentum < 200 && this.recentCollisions <= 1) {
+      calmnessLevel = "Calm";
+      bgColor = "rgba(0, 30, 50, 0.8)"; // Dark blue
+      textColor = "#87CEEB";
+    } else if (energy < 15000 && momentum < 500) {
+      calmnessLevel = "Active";
+      bgColor = "rgba(50, 50, 0, 0.8)"; // Dark yellow
+      textColor = "#FFD700";
+    } else if (energy < 30000 || momentum < 1000) {
+      calmnessLevel = "Energetic";
+      bgColor = "rgba(70, 35, 0, 0.8)"; // Dark orange
+      textColor = "#FFA500";
+    } else {
+      calmnessLevel = "Chaotic";
+      bgColor = "rgba(70, 0, 0, 0.8)"; // Dark red
+      textColor = "#FF6B6B";
+    }
+
+    // retrieve text
+    const getCalmnessMessage = () => {
+      const energyLevel = getEnergyLevel();
+      const activityLevel = getActivityLevel();
+      const energyMessages = (CALMNESS_MESSAGES as any)[energyLevel] || {};
+      return (
+        energyMessages[activityLevel] || `${energyLevel} - ${activityLevel}`
+      );
+    };
+
+    const getEnergyLevel = () => {
+      if (energy < 5000) return "Low";
+      if (energy < 30000) return "Moderate";
+      return "High";
+    };
+
+    const getActivityLevel = () => {
+      if (this.recentCollisions > 3 || momentumChange > 100) return "Turbulent";
+      if (this.recentCollisions > 1 || momentumChange > 50) return "Dynamic";
+      return "Stable";
+    };
+
+    calmnessText.textContent = getCalmnessMessage();
+    momentumDisplay.textContent = momentum.toFixed(1);
+    energyDisplay.textContent = getEnergyLevel();
+    activityDisplay.textContent = getActivityLevel();
+
+    indicator.style.background = bgColor;
+    indicator.style.color = textColor;
+    indicator.style.borderTop = `2px solid ${textColor}`;
   }
 
   private setupBackgroundTexture() {
