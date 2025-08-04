@@ -4,7 +4,7 @@ import { Theme, getTheme } from "./themes";
 export let PHYSICS = {
   FORCE_SCALE: 1000,
   TORQUE_SCALE: 1000,
-  RESTITUTION: 1,
+  RESTITUTION: 0.8,
   FRICTION: 0.3,
   PENETRATION_SLOP: 0.1,
   PERCENT_CORRECTION: 0.9,
@@ -99,7 +99,7 @@ export const CANVAS = {
 
 export const CALMNESS_MESSAGES = {
   Low: {
-    Stable: "And all was still - Me",
+    Stable: "And all was still",
     Dynamic: "I see traces of motion...",
     Turbulent: "Just you wait a moment",
   },
@@ -110,7 +110,7 @@ export const CALMNESS_MESSAGES = {
   },
   High: {
     Stable: "Find stability in the chaos",
-    Dynamic: "just a step away",
+    Dynamic: "Just a step away",
     Turbulent: "WHOAH",
   },
 } as const;

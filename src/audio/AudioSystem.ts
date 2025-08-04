@@ -10,6 +10,11 @@ export interface AudioSettings {
   windThreshold: number;
 }
 
+// I'm not going to pretend I understand half the code
+// I just know that it somewhat works? I'll change some sounds later
+// turns out there's a lot of sounds you can make with straight up oscillators
+// and filters and stuff
+
 export class AudioSystem {
   private audioContext: AudioContext | null = null;
   private settings: AudioSettings;
@@ -22,11 +27,11 @@ export class AudioSystem {
   constructor() {
     this.settings = {
       enabled: true,
-      volume: 0.7,
+      volume: 0.9,
       collisionSoundsEnabled: true,
       windSoundsEnabled: true,
-      collisionVolume: 0.8,
-      windVolume: 0.6,
+      collisionVolume: 0.9,
+      windVolume: 0.8,
       windThreshold: 200, // velocity threshold for wind sounds
     };
   }
@@ -191,12 +196,12 @@ export class AudioSystem {
         filterNode.Q.setValueAtTime(qValue, this.audioContext.currentTime);
       }
 
-      const sizeVolumeBoost = Math.min(1.5, sizeMultiplier);
+      const sizeVolumeBoost = Math.min(3.0, sizeMultiplier);
       const volume =
         this.settings.volume *
         this.settings.collisionVolume *
-        normalizedVelocity *
-        0.8 *
+        Math.max(0.3, normalizedVelocity) *
+        2.5 *
         sizeVolumeBoost;
       const attackTime = velocity > 300 ? 0.005 : 0.02;
       const releaseTime = velocity > 300 ? 0.1 : 0.2;
@@ -242,17 +247,25 @@ export class AudioSystem {
         (maxVelocity - this.settings.windThreshold) / 400,
         1
       );
-      const targetVolume =
+      const baseVolume =
         this.settings.volume *
         this.settings.windVolume *
-        normalizedVelocity *
-        0.4;
+        Math.max(0.5, normalizedVelocity) *
+        2.0;
 
       try {
         this.windGainNode.gain.linearRampToValueAtTime(
-          targetVolume,
+          baseVolume * 1.5,
           this.audioContext!.currentTime + 0.1
         );
+
+        const userData = (this.windGainNode as any).userData;
+        if (userData && userData.windGain2) {
+          userData.windGain2.gain.linearRampToValueAtTime(
+            baseVolume * 0.8,
+            this.audioContext!.currentTime + 0.1
+          );
+        }
       } catch (error) {}
     }
   }

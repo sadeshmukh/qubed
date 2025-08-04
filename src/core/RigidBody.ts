@@ -87,8 +87,12 @@ export class RigidBody extends Object implements Collidable {
     this.position = this.position.add(this.velocity.multiply(clampedDeltaTime));
     this.rotation += this.angularVelocity * clampedDeltaTime;
 
-    this.velocity = this.velocity.multiply(PHYSICS.AIR_RESISTANCE);
-    this.angularVelocity *= PHYSICS.ANGULAR_DAMPING;
+    // Apply air resistance properly as a damping force over time
+    const airResistanceCoeff = 1 - (1 - PHYSICS.AIR_RESISTANCE) * clampedDeltaTime * 60;
+    this.velocity = this.velocity.multiply(airResistanceCoeff);
+    
+    const angularDampingCoeff = 1 - (1 - PHYSICS.ANGULAR_DAMPING) * clampedDeltaTime * 60;
+    this.angularVelocity *= angularDampingCoeff;
 
     const velocityMagnitude = this.velocity.magnitude();
     if (velocityMagnitude > PHYSICS.MAX_VELOCITY) {

@@ -706,7 +706,6 @@ export class World {
 
     this.setupPhysicsControls();
     this.setupTimeSpeedControl();
-    this.setupContactDurationControl();
     this.setupThemeControls();
     this.setupBackgroundTexture();
     this.setupInspectorMode();
@@ -717,6 +716,9 @@ export class World {
     this.setupCursorPanel();
     this.setupAudioPanel();
     this.setupActionButtons();
+
+    // Set up canvas click handler once after all modes are initialized
+    this.setupCanvasClickHandler();
   }
 
   private setupPhysicsControls() {
@@ -862,9 +864,9 @@ export class World {
 
   private setRealisticMode() {
     updatePhysicsSettings({
-      RESTITUTION: 0.8,
-      FRICTION: 0.3,
-      AIR_RESISTANCE: 0.99,
+      RESTITUTION: 0.7,
+      FRICTION: 0.4,
+      AIR_RESISTANCE: 0.995,
     });
 
     this.updatePhysicsUI();
@@ -960,67 +962,164 @@ export class World {
     this.saveSettings();
   }
 
+  private setExclusiveMode(
+    mode: "inspector" | "delete" | "create",
+    enabled: boolean
+  ) {
+    if (enabled) {
+      this.inspectorMode = false;
+      this.deleteMode = false;
+      this.createMode = false;
+
+      const inspectorCheckbox = document.getElementById(
+        "inspector-mode"
+      ) as HTMLInputElement;
+      const deleteCheckbox = document.getElementById(
+        "delete-mode"
+      ) as HTMLInputElement;
+      const placeModeCheckbox = document.getElementById(
+        "place-mode"
+      ) as HTMLInputElement;
+
+      if (inspectorCheckbox) inspectorCheckbox.checked = false;
+      if (deleteCheckbox) deleteCheckbox.checked = false;
+      if (placeModeCheckbox) placeModeCheckbox.checked = false;
+
+      switch (mode) {
+        case "inspector":
+          this.inspectorMode = true;
+          if (inspectorCheckbox) inspectorCheckbox.checked = true;
+          break;
+        case "delete":
+          this.deleteMode = true;
+          if (deleteCheckbox) deleteCheckbox.checked = true;
+          break;
+        case "create":
+          this.createMode = true;
+          if (placeModeCheckbox) placeModeCheckbox.checked = true;
+          break;
+      }
+    } else {
+      switch (mode) {
+        case "inspector":
+          this.inspectorMode = false;
+          break;
+        case "delete":
+          this.deleteMode = false;
+          break;
+        case "create":
+          this.createMode = false;
+          break;
+      }
+    }
+
+    this.updateCanvasCursor();
+    this.updateInspectorPanel();
+  }
+
+  private updateCanvasCursor() {
+    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+    if (!canvas) return;
+
+    canvas.classList.remove("inspector-cursor", "create-cursor");
+    canvas.style.cursor = "default";
+
+    if (this.inspectorMode) {
+      canvas.classList.add("inspector-cursor");
+    } else if (this.createMode) {
+      canvas.classList.add("create-cursor");
+    } else if (this.deleteMode) {
+      canvas.style.cursor = "crosshair";
+    }
+  }
+
+  private updateInspectorPanel() {
+    const inspectorPanel = document.getElementById(
+      "object-inspector"
+    ) as HTMLDivElement;
+    if (inspectorPanel) {
+      inspectorPanel.style.display = this.inspectorMode ? "block" : "none";
+      if (!this.inspectorMode) {
+        this.selectedObject = null;
+      }
+    }
+  }
+
   private setupInspectorMode() {
     const inspectorCheckbox = document.getElementById(
       "inspector-mode"
     ) as HTMLInputElement;
-    const inspectorPanel = document.getElementById(
-      "object-inspector"
-    ) as HTMLDivElement;
-    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 
-    if (inspectorCheckbox && inspectorPanel && canvas) {
+    if (inspectorCheckbox) {
       inspectorCheckbox.addEventListener("change", () => {
-        this.inspectorMode = inspectorCheckbox.checked;
-        inspectorPanel.style.display = this.inspectorMode ? "block" : "none";
-
-        if (this.inspectorMode) {
-          canvas.classList.add("inspector-cursor");
-          this.setupCanvasClickHandler();
-        } else {
-          canvas.classList.remove("inspector-cursor");
-          this.selectedObject = null;
-        }
+        this.setExclusiveMode("inspector", inspectorCheckbox.checked);
         this.saveSettings();
       });
     }
   }
 
+  private canvasClickHandler = (event: MouseEvent) => {
+    if (this.createMode) {
+      this.handleCreateClick(event);
+      return;
+    }
+
+    if (!this.inspectorMode && !this.deleteMode) return;
+
+    const canvas = event.target as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    const screenX = event.clientX - rect.left;
+    const screenY = event.clientY - rect.top;
+
+    const worldPos = this.screenToWorld(new Vector(screenX, screenY));
+
+    // find the clicked object
+    for (let i = 0; i < this.objects.length; i++) {
+      const object = this.objects[i];
+      if (object instanceof RigidBody) {
+        const distance = object.position.subtract(worldPos).magnitude();
+        if (distance < 50) {
+          if (this.deleteMode) {
+            this.objects.splice(i, 1);
+          } else if (this.inspectorMode) {
+            this.selectedObject = object;
+            this.updateInspector();
+          }
+          break;
+        }
+      }
+    }
+  };
+
+  private canvasMouseMoveHandler = (event: MouseEvent) => {
+    if (!this.cursorTrailEnabled) return;
+
+    const canvas = event.target as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    const screenX = event.clientX - rect.left;
+    const screenY = event.clientY - rect.top;
+    const worldPos = this.screenToWorld(new Vector(screenX, screenY));
+
+    this.cursorTrailPoints.push({
+      position: worldPos,
+      time: this.currentTime,
+    });
+
+    // keep only recent points
+    while (this.cursorTrailPoints.length > this.cursorTrailLength) {
+      this.cursorTrailPoints.shift();
+    }
+  };
+
   private setupCanvasClickHandler() {
     const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 
     if (canvas) {
-      canvas.addEventListener("click", (event) => {
-        if (this.createMode) {
-          this.handleCreateClick(event);
-          return;
-        }
+      canvas.removeEventListener("click", this.canvasClickHandler);
+      canvas.removeEventListener("mousemove", this.canvasMouseMoveHandler);
 
-        if (!this.inspectorMode && !this.deleteMode) return;
-
-        const rect = canvas.getBoundingClientRect();
-        const screenX = event.clientX - rect.left;
-        const screenY = event.clientY - rect.top;
-
-        const worldPos = this.screenToWorld(new Vector(screenX, screenY));
-
-        // find the clicked object
-        for (let i = 0; i < this.objects.length; i++) {
-          const object = this.objects[i];
-          if (object instanceof RigidBody) {
-            const distance = object.position.subtract(worldPos).magnitude();
-            if (distance < 50) {
-              if (this.deleteMode) {
-                this.objects.splice(i, 1);
-              } else if (this.inspectorMode) {
-                this.selectedObject = object;
-                this.updateInspector();
-              }
-              break;
-            }
-          }
-        }
-      });
+      canvas.addEventListener("click", this.canvasClickHandler);
+      canvas.addEventListener("mousemove", this.canvasMouseMoveHandler);
     }
   }
 
@@ -1152,22 +1251,6 @@ export class World {
     ctx.restore();
   }
 
-  private setupContactDurationControl() {
-    const durationSlider = document.getElementById(
-      "contact-duration"
-    ) as HTMLInputElement;
-    const durationValue = document.getElementById(
-      "contact-duration-value"
-    ) as HTMLSpanElement;
-
-    if (durationSlider && durationValue) {
-      durationSlider.addEventListener("input", () => {
-        this.contactPointDuration = parseFloat(durationSlider.value);
-        durationValue.textContent = `${this.contactPointDuration.toFixed(1)}s`;
-        this.saveSettings();
-      });
-    }
-  }
 
   private setupPauseButton() {
     const pauseBtn = document.getElementById("pause-btn") as HTMLButtonElement;
@@ -1194,7 +1277,6 @@ export class World {
     const createRandomBtn = document.getElementById(
       "create-random"
     ) as HTMLButtonElement;
-    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 
     if (createBtn && createPanel) {
       createBtn.addEventListener("click", () => {
@@ -1206,14 +1288,8 @@ export class World {
 
     if (placeModeCheckbox) {
       placeModeCheckbox.addEventListener("change", () => {
-        this.createMode = placeModeCheckbox.checked;
-        if (canvas) {
-          if (this.createMode) {
-            canvas.classList.add("create-cursor");
-          } else {
-            canvas.classList.remove("create-cursor");
-          }
-        }
+        this.setExclusiveMode("create", placeModeCheckbox.checked);
+        this.saveSettings();
       });
     }
 
@@ -1225,8 +1301,6 @@ export class World {
 
     // Set up the dynamic form controls
     this.setupCreateFormControls();
-
-    // Canvas click handler is set up in setupCanvasClickHandler()
   }
 
   private setupCreateFormControls() {
@@ -1513,51 +1587,18 @@ export class World {
   }
 
   private setupCursorTracking() {
-    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-
-    if (canvas) {
-      canvas.addEventListener("mousemove", (event) => {
-        if (!this.cursorTrailEnabled) return;
-
-        const rect = canvas.getBoundingClientRect();
-        const screenX = event.clientX - rect.left;
-        const screenY = event.clientY - rect.top;
-        const worldPos = this.screenToWorld(new Vector(screenX, screenY));
-
-        this.cursorTrailPoints.push({
-          position: worldPos,
-          time: this.currentTime,
-        });
-
-        // keep only recent points
-        while (this.cursorTrailPoints.length > this.cursorTrailLength) {
-          this.cursorTrailPoints.shift();
-        }
-      });
-    }
+    // Cursor tracking is now handled in setupCursorTrackingForCanvas
+    // which is called from setupCanvasClickHandler
   }
 
   private setupDeleteMode() {
     const deleteCheckbox = document.getElementById(
       "delete-mode"
     ) as HTMLInputElement;
-    const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 
-    if (deleteCheckbox && canvas) {
+    if (deleteCheckbox) {
       deleteCheckbox.addEventListener("change", () => {
-        this.deleteMode = deleteCheckbox.checked;
-        if (this.deleteMode) {
-          canvas.style.cursor = "crosshair";
-          const inspectorCheckbox = document.getElementById(
-            "inspector-mode"
-          ) as HTMLInputElement;
-          if (inspectorCheckbox) {
-            inspectorCheckbox.checked = false;
-            this.inspectorMode = false;
-          }
-        } else {
-          canvas.style.cursor = "default";
-        }
+        this.setExclusiveMode("delete", deleteCheckbox.checked);
         this.saveSettings();
       });
     }
@@ -1740,28 +1781,22 @@ export class World {
       momentumChange = Math.abs(recentAvg - olderAvg);
     }
 
-    let calmnessLevel: string;
     let bgColor: string;
     let textColor: string;
 
     if (energy < 1000 && momentum < 50 && this.recentCollisions === 0) {
-      calmnessLevel = "Peaceful";
       bgColor = "rgba(0, 50, 0, 0.8)"; // Dark green
       textColor = "#90EE90";
     } else if (energy < 5000 && momentum < 200 && this.recentCollisions <= 1) {
-      calmnessLevel = "Calm";
       bgColor = "rgba(0, 30, 50, 0.8)"; // Dark blue
       textColor = "#87CEEB";
     } else if (energy < 15000 && momentum < 500) {
-      calmnessLevel = "Active";
       bgColor = "rgba(50, 50, 0, 0.8)"; // Dark yellow
       textColor = "#FFD700";
     } else if (energy < 30000 || momentum < 1000) {
-      calmnessLevel = "Energetic";
       bgColor = "rgba(70, 35, 0, 0.8)"; // Dark orange
       textColor = "#FFA500";
     } else {
-      calmnessLevel = "Chaotic";
       bgColor = "rgba(70, 0, 0, 0.8)"; // Dark red
       textColor = "#FF6B6B";
     }
@@ -1895,25 +1930,6 @@ export class World {
     }
   }
 
-  private drawNoiseTexture() {
-    if (!this.ctx) return;
-
-    const imageData = this.ctx.createImageData(
-      this.screenWidth,
-      this.screenHeight
-    );
-    const data = imageData.data;
-
-    for (let i = 0; i < data.length; i += 4) {
-      const noise = Math.random() * 255;
-      data[i] = noise; // red
-      data[i + 1] = noise; // green
-      data[i + 2] = noise; // blue
-      data[i + 3] = 25; // alpha (very low opacity)
-    }
-
-    this.ctx.putImageData(imageData, 0, 0);
-  }
 
   private drawFabricTexture() {
     if (!this.ctx) return;
@@ -1973,7 +1989,6 @@ export class World {
       windForce: { x: WIND.FORCE.x, y: WIND.FORCE.y },
       windEnabled: WIND.ENABLED,
       timeSpeed: this.timeSpeed,
-      contactPointDuration: this.contactPointDuration,
       theme: this.currentTheme,
       inspectorMode: this.inspectorMode,
       backgroundTexture: this.backgroundTexture,
@@ -2027,21 +2042,6 @@ export class World {
         }
       }
 
-      if (settings.contactPointDuration !== undefined) {
-        this.contactPointDuration = settings.contactPointDuration;
-        const durationSlider = document.getElementById(
-          "contact-duration"
-        ) as HTMLInputElement;
-        const durationValue = document.getElementById(
-          "contact-duration-value"
-        ) as HTMLSpanElement;
-        if (durationSlider && durationValue) {
-          durationSlider.value = settings.contactPointDuration.toString();
-          durationValue.textContent = `${settings.contactPointDuration.toFixed(
-            1
-          )}s`;
-        }
-      }
 
       if (settings.theme) {
         this.currentTheme = settings.theme;
@@ -2074,7 +2074,6 @@ export class World {
     setWindForce(new Vector(0, 0.05));
     WIND.ENABLED = true;
     this.timeSpeed = 1.0;
-    this.contactPointDuration = 1.0;
     this.currentTheme = "default";
     this.inspectorMode = false;
     this.selectedObject = null;
@@ -2090,12 +2089,6 @@ export class World {
     ) as HTMLInputElement;
     const timeSpeedValue = document.getElementById(
       "time-speed-value"
-    ) as HTMLSpanElement;
-    const durationSlider = document.getElementById(
-      "contact-duration"
-    ) as HTMLInputElement;
-    const durationValue = document.getElementById(
-      "contact-duration-value"
     ) as HTMLSpanElement;
     const themeSelect = document.getElementById(
       "theme-select"
@@ -2115,8 +2108,6 @@ export class World {
     if (windEnabled) windEnabled.checked = true;
     if (timeSpeedSlider) timeSpeedSlider.value = "1";
     if (timeSpeedValue) timeSpeedValue.textContent = "1.0x";
-    if (durationSlider) durationSlider.value = "1";
-    if (durationValue) durationValue.textContent = "1.0s";
     if (themeSelect) themeSelect.value = "default";
     if (inspectorCheckbox) inspectorCheckbox.checked = false;
     if (inspectorPanel) inspectorPanel.style.display = "none";
