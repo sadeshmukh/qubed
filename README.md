@@ -3,6 +3,7 @@
 A 2D physics simulation built with TypeScript. Simulates rigid body dynamics with collision detection and response for boxes, <10-sided polygons, and walls.
 
 WARNING: It is very buggy, especially at high velocities, and especially so with lots of objects (> 20). Otherwise, it should work mostly alright.
+note for future me: if node isn't working, update tool-versions (removed for cloudflare)
 
 ## Architecture
 
