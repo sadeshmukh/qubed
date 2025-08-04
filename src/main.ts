@@ -1,4 +1,4 @@
-import { World } from "./simulation/World";
+import { World } from "./simulation/NewWorld";
 import { Box } from "./shapes/Box";
 import { Vector } from "./core/Vector";
 import { Wall } from "./shapes/Wall";
