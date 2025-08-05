@@ -14,6 +14,7 @@ export interface UISettings {
   theme: string;
   inspectorMode: boolean;
   backgroundTexture: string;
+  calmnessIndicatorEnabled: boolean;
 }
 
 export class UIManager {
@@ -52,6 +53,7 @@ export class UIManager {
   private setupPhysicsControls(): void {
     this.setupWindControls();
     this.setupPhysicsSliders();
+    this.setupCalmnessIndicatorToggle();
   }
 
   private setupWindControls(): void {
@@ -119,6 +121,17 @@ export class UIManager {
         const value = parseFloat(airResistanceSlider.value);
         airResistanceValue.textContent = value.toString();
         updatePhysicsSettings({ AIR_RESISTANCE: value });
+        this.saveSettings();
+      });
+    }
+  }
+
+  private setupCalmnessIndicatorToggle(): void {
+    const calmnessToggle = document.getElementById(
+      "calmness-indicator-toggle"
+    ) as HTMLInputElement;
+    if (calmnessToggle) {
+      calmnessToggle.addEventListener("change", () => {
         this.saveSettings();
       });
     }
@@ -409,13 +422,17 @@ export class UIManager {
   }
 
   saveSettings(): void {
+    const calmnessToggle = document.getElementById(
+      "calmness-indicator-toggle"
+    ) as HTMLInputElement;
     const settings: UISettings = {
       windForce: { x: WIND.FORCE.x, y: WIND.FORCE.y },
       windEnabled: WIND.ENABLED,
       timeSpeed: this.timeSpeed,
       theme: this.currentTheme,
-      inspectorMode: false, // handled by inspector component
+      inspectorMode: false,
       backgroundTexture: this.backgroundTexture,
+      calmnessIndicatorEnabled: calmnessToggle ? calmnessToggle.checked : false,
     };
 
     try {
@@ -471,6 +488,15 @@ export class UIManager {
       if (settings.backgroundTexture) {
         this.backgroundTexture = settings.backgroundTexture;
       }
+
+      if (settings.calmnessIndicatorEnabled !== undefined) {
+        const calmnessToggle = document.getElementById(
+          "calmness-indicator-toggle"
+        ) as HTMLInputElement;
+        if (calmnessToggle) {
+          calmnessToggle.checked = settings.calmnessIndicatorEnabled;
+        }
+      }
     } catch (e) {
       console.warn("Failed to load settings from localStorage:", e);
     }
@@ -484,7 +510,7 @@ export class UIManager {
     }
 
     setWindForce(new Vector(0, 0.05));
-    WIND.ENABLED = true;
+    WIND.ENABLED = false;
     this.timeSpeed = 1.0;
     this.currentTheme = "default";
     this.backgroundTexture = "none";
@@ -500,11 +526,35 @@ export class UIManager {
     const timeSpeedValue = document.getElementById(
       "time-speed-value"
     ) as HTMLSpanElement;
+    const calmnessToggle = document.getElementById(
+      "calmness-indicator-toggle"
+    ) as HTMLInputElement;
 
     if (windX) windX.value = "0";
     if (windY) windY.value = "0.05";
-    if (windEnabled) windEnabled.checked = true;
+    if (windEnabled) windEnabled.checked = false;
     if (timeSpeedSlider) timeSpeedSlider.value = "1";
     if (timeSpeedValue) timeSpeedValue.textContent = "1.0x";
+    if (calmnessToggle) calmnessToggle.checked = false;
+
+    const audioEnabled = document.getElementById(
+      "audio-enabled"
+    ) as HTMLInputElement;
+    const collisionSounds = document.getElementById(
+      "collision-sounds"
+    ) as HTMLInputElement;
+    const windSounds = document.getElementById(
+      "wind-sounds"
+    ) as HTMLInputElement;
+
+    if (audioEnabled) audioEnabled.checked = false;
+    if (collisionSounds) collisionSounds.checked = false;
+    if (windSounds) windSounds.checked = false;
+
+    this.audioSystem.updateSettings({
+      enabled: false,
+      collisionSoundsEnabled: false,
+      windSoundsEnabled: false,
+    });
   }
 }

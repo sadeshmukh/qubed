@@ -271,7 +271,7 @@
 
       <div id="control-panel">
         <h3>Physics Controls</h3>
-        
+
         <div class="control-group">
           <label>Quick Presets</label>
           <div style="display: flex; gap: 8px; flex-wrap: wrap">
@@ -308,7 +308,7 @@
             />
           </div>
           <div class="control-row">
-            <input type="checkbox" id="wind-enabled" checked />
+            <input type="checkbox" id="wind-enabled" />
             <label for="wind-enabled">Wind Enabled</label>
           </div>
         </div>
@@ -391,6 +391,15 @@
           <div class="control-row">
             <input type="checkbox" id="delete-mode" />
             <label for="delete-mode">Delete Mode</label>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <div class="control-row">
+            <input type="checkbox" id="calmness-indicator-toggle" />
+            <label for="calmness-indicator-toggle"
+              >Show Calmness Indicator</label
+            >
           </div>
         </div>
 
@@ -577,7 +586,7 @@
 
         <div class="control-group">
           <div class="control-row">
-            <input type="checkbox" id="audio-enabled" checked />
+            <input type="checkbox" id="audio-enabled" />
             <label for="audio-enabled">Enable Audio</label>
           </div>
         </div>
@@ -598,7 +607,7 @@
 
         <div class="control-group">
           <div class="control-row">
-            <input type="checkbox" id="collision-sounds" checked />
+            <input type="checkbox" id="collision-sounds" />
             <label for="collision-sounds">Collision Sounds</label>
           </div>
         </div>
@@ -620,7 +629,7 @@
 
         <div class="control-group">
           <div class="control-row">
-            <input type="checkbox" id="wind-sounds" checked />
+            <input type="checkbox" id="wind-sounds" />
             <label for="wind-sounds">Wind Sounds</label>
           </div>
         </div>
@@ -683,6 +692,7 @@
         border-top: 1px solid #333;
         z-index: 30;
         transition: all 0.3s ease;
+        display: none;
       "
     >
       <div id="calmness-text">System at rest</div>

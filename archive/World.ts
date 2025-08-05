@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Object } from "../core/Object";
 import { RigidBody } from "../core/RigidBody";
 import { Wall } from "../shapes/Wall";
@@ -1251,7 +1252,6 @@ export class World {
     ctx.restore();
   }
 
-
   private setupPauseButton() {
     const pauseBtn = document.getElementById("pause-btn") as HTMLButtonElement;
 
@@ -1930,7 +1930,6 @@ export class World {
     }
   }
 
-
   private drawFabricTexture() {
     if (!this.ctx) return;
 
@@ -2041,7 +2040,6 @@ export class World {
           timeSpeedValue.textContent = `${settings.timeSpeed.toFixed(1)}x`;
         }
       }
-
 
       if (settings.theme) {
         this.currentTheme = settings.theme;

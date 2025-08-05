@@ -62,6 +62,9 @@ export class StatusDisplay {
     const energyDisplay = document.getElementById("energy-display");
     const activityDisplay = document.getElementById("activity-display");
     const indicator = document.getElementById("calmness-indicator");
+    const toggle = document.getElementById(
+      "calmness-indicator-toggle"
+    ) as HTMLInputElement;
 
     if (
       !calmnessText ||
@@ -70,6 +73,11 @@ export class StatusDisplay {
       !activityDisplay ||
       !indicator
     ) {
+      return;
+    }
+
+    if (toggle && !toggle.checked) {
+      indicator.style.display = "none";
       return;
     }
 
@@ -131,6 +139,7 @@ export class StatusDisplay {
     indicator.style.background = bgColor;
     indicator.style.color = textColor;
     indicator.style.borderTop = `2px solid ${textColor}`;
+    indicator.style.display = "block";
   }
 
   private getEnergyLevel(energy: number): string {

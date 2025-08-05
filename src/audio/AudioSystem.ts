@@ -26,10 +26,10 @@ export class AudioSystem {
 
   constructor() {
     this.settings = {
-      enabled: true,
+      enabled: false,
       volume: 0.9,
-      collisionSoundsEnabled: true,
-      windSoundsEnabled: true,
+      collisionSoundsEnabled: false,
+      windSoundsEnabled: false,
       collisionVolume: 0.9,
       windVolume: 0.8,
       windThreshold: 200, // velocity threshold for wind sounds

@@ -23,7 +23,7 @@ export function updatePhysicsSettings(settings: Partial<typeof PHYSICS>): void {
 
 export let WIND = {
   FORCE: new Vector(0, 0.05),
-  ENABLED: true,
+  ENABLED: false,
 };
 
 export function setWindForce(force: Vector): void {
